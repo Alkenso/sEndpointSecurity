@@ -14,6 +14,7 @@ extension OpaquePointer {
             // flags requests
         case ES_EVENT_TYPE_AUTH_OPEN:
             return es_respond_flags_result(self, message, flags, cache)
+            
             // rest are auth requests
         default:
             return es_respond_auth_result(self, message, flags > 0 ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY, cache)
@@ -21,7 +22,9 @@ extension OpaquePointer {
     }
     
     func esFallback(_ message: UnsafePointer<es_message_t>) -> es_respond_result_t {
-        guard message.pointee.action_type == ES_ACTION_TYPE_AUTH else { return ES_RESPOND_RESULT_SUCCESS }
+        guard message.pointee.action_type == ES_ACTION_TYPE_AUTH else {
+            return ES_RESPOND_RESULT_SUCCESS
+        }
         return esResolve(message, flags: .max, cache: false)
     }
     
