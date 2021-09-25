@@ -1716,34 +1716,6 @@ private extension ESMessageSerializationTests {
     }
 }
 
-private extension stat {
-    static func random() throws -> stat {
-        try Bundle.main.bundleURL.stat()
-    }
-}
-
-private extension audit_token_t {
-    static func random() throws -> audit_token_t {
-        try .current()
-    }
-}
-
-private extension attrlist {
-    static var random: attrlist {
-        .init(bitmapcount: 1, reserved: 2, commonattr: 3, volattr: 4, dirattr: 5, fileattr: 6, forkattr: 7)
-    }
-}
-
-private extension statfs {
-    static var random: statfs {
-        var value = statfs()
-        withUnsafeMutablePointer(to: &value) { pointer in
-            _ = SecRandomCopyBytes(kSecRandomDefault, MemoryLayout<statfs>.size, pointer)
-        }
-        return value
-    }
-}
-
 private func withExtendedLifetime(_ values: [Any], _ body: () throws -> Void) rethrows -> Void {
     try withExtendedLifetime(values as Any, body)
 }

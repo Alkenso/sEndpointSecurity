@@ -1,4 +1,3 @@
-
 @testable import sEndpointSecurity
 
 import Foundation
