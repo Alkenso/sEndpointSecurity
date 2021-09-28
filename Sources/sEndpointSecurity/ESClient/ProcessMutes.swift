@@ -52,14 +52,8 @@ class ProcessMutes {
 extension ProcessMutes {
     convenience init(esClient: OpaquePointer) {
         self.init(
-            esMute: {
-                var copy = $0
-                return es_mute_process(esClient, &copy)
-            },
-            esUnmute: {
-                var copy = $0
-                return es_unmute_process(esClient, &copy)
-            }
+            esMute: { withUnsafePointer(to: $0) { es_mute_process(esClient, $0) } },
+            esUnmute: { withUnsafePointer(to: $0) { es_unmute_process(esClient, $0) } }
         )
     }
 }

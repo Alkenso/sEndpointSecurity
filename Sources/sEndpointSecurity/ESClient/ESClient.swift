@@ -11,54 +11,18 @@ import EndpointSecurity
 import SwiftConvenience
 
 
-public struct ESAuthResolution: Equatable, Codable {
-    public var result: ESAuthResult
-    public var cache: Bool
-}
-
-public extension ESAuthResolution {
-    static let allow = ESAuthResolution(result: .auth(true), cache: true)
-    static let allowOnce = ESAuthResolution(result: .auth(true), cache: false)
-    static let deny = ESAuthResolution(result: .auth(false), cache: true)
-    static let denyOnce = ESAuthResolution(result: .auth(false), cache: false)
-}
-
-public enum ESMuteProcess: Hashable, Codable {
-    // - Exact process
-    case token(audit_token_t)
-    case pid(pid_t)
-    
-    // - Patterns
-    case euid(uid_t)
-    
-    case name(String)
-    case pathPrefix(String)
-    case pathLiteral(String)
-    
-    //  Codesign Team Identifier (DEVELOPMENT_TEAM in Xcode)
-    case teamIdentifier(String)
-    
-    //  Usually equals to application bundle identifier
-    case signingID(String)
-}
-
-public enum ESClientCreateError: Error {
-    case create(es_new_client_result_t)
-    case subscribe
-    case other(Error)
-}
-
 public class ESClient {
     public var config = Config()
     
-    /// Perfonamce-sensitive handler. Do as minimum work as possible.
+    /// Perfonamce-sensitive handler, called **synchronously** for each message.
+    /// Do as minimum work as possible.
     /// To filter processes, use mute/unmute process methods.
-    public var filterMessageHandler: ((ESMessagePtr, ESProcess) -> Bool /* isIncluded */)?
+    public var messageFilter = TransformerOneToOne<(ESMessagePtr, ESProcess), Bool> { $0.reduce(true) { $0 && $1 } }
     
-    public var authMessageHandler: ((ESMessagePtr, _ reply: @escaping (ESAuthResolution) -> Void) -> Void)?
-    public var postAuthMessageHandler: ((_ msg: ESMessagePtr, _ info: ResponseInfo) -> Void)?
+    public var authMessage = TransformerOneToOne<ESMessagePtr, ESAuthResolution>(combine: ESAuthResolution.combine)
+    public var postAuthMessage = Notifier<(msg: ESMessagePtr, info: ResponseInfo)>()
     
-    public var notifyMessageHandler: ((ESMessagePtr) -> Void)?
+    public var notifyMessage = Notifier<ESMessagePtr>()
     
     
     public init() throws {
@@ -138,7 +102,7 @@ public class ESClient {
     
     private func shoudMuteMessage(_ message: ESMessagePtr) -> Bool {
         let process = findProcess(for: message)
-        guard filterMessageHandler?(message, process) != false else { return false }
+        guard messageFilter.sync((message, process)) != false else { return false }
         return _processMutes.isMuted(process)
     }
     
@@ -159,7 +123,7 @@ public class ESClient {
         
         switch message.action_type {
         case ES_ACTION_TYPE_AUTH:
-            guard let authMessageHandler = authMessageHandler, !isMuted else {
+            guard !isMuted else {
                 respond(message, resolution: .allowOnce, reason: .muted)
                 return
             }
@@ -167,12 +131,12 @@ public class ESClient {
             let item = scheduleCancel(for: message) {
                 self.respond(message, resolution: .allowOnce, reason: .timeout)
             }
-            authMessageHandler(message) {
+            authMessage.async(message) {
                 self.respond(message, resolution: $0, reason: .normal, timeoutItem: item)
             }
         case ES_ACTION_TYPE_NOTIFY:
             guard !isMuted else { return }
-            notifyMessageHandler?(message)
+            notifyMessage.notify(message)
         default:
             break
         }
@@ -185,7 +149,7 @@ public class ESClient {
         
         if let reason = reason {
             let responseInfo = ResponseInfo(reason: reason, resolution: resolution, status: status)
-            postAuthMessageHandler?(message, responseInfo)
+            postAuthMessage.notify((message, responseInfo))
         }
     }
     

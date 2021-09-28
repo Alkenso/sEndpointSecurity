@@ -2,285 +2,159 @@
 //  File.swift
 //  
 //
-//  Created by Alkenso (Vladimir Vashurkin) on 19.09.2021.
+//  Created by Alkenso (Vladimir Vashurkin) on 27.09.2021.
 //
 
+import EndpointSecurity
 import Foundation
+import SwiftConvenience
 
 
-
-/*
-func test_ESAuthResolution_combine() {
-    XCTAssertEqual(
-        ESAuthResolution.combine([]),
-        ESAuthResolution(result: .auth(true), cache: false)
-    )
-    XCTAssertEqual(
-        ESAuthResolution.combine([
-            ESAuthResolution(result: .flags(123), cache: true)
-        ]),
-        ESAuthResolution(result: .flags(123), cache: true)
-    )
-    XCTAssertEqual(
-        ESAuthResolution.combine([
-            ESAuthResolution(result: .auth(true), cache: false),
-            ESAuthResolution(result: .flags(123), cache: true)
-        ]),
-        ESAuthResolution(result: .flags(123), cache: false)
-    )
-    XCTAssertEqual(
-        ESAuthResolution.combine([
-            ESAuthResolution(result: .auth(false), cache: false),
-            ESAuthResolution(result: .flags(123), cache: true)
-        ]),
-        ESAuthResolution(result: .auth(false), cache: false)
-    )
-    XCTAssertEqual(
-        ESAuthResolution.combine([
-            ESAuthResolution(result: .auth(true), cache: false),
-            ESAuthResolution(result: .flags(0), cache: true)
-        ]),
-        ESAuthResolution(result: .auth(false), cache: false)
-    )
-}
-extension ESAuthResolution {
-    static func combine(_ resolutions: [ESAuthResolution]) -> ESAuthResolution {
-        guard let first = resolutions.first else { return .allowOnce }
-        guard resolutions.count > 1 else { return first }
-        
-        let flags = resolutions.map(\.result.rawValue).reduce(UInt32.max) { $0 & $1 }
-        let cache = resolutions.map(\.cache).reduce(true) { $0 && $1 }
-        
-        return ESAuthResolution(result: .flags(flags), cache: cache)
-    }
-}
-
-public protocol XPCProxyCreating {
-    associatedtype T
-    func remoteProxyObject(withErrorHandler handler: @escaping (Error) -> Void) -> T
-}
-
-extension XPCProxyCreating {
+public class ESXPCClient: NSObject {
+    public let authMessage = TransformerOneToOne<ESMessagePtr, ESAuthResolution>(combine: ESAuthResolution.combine)
+    public let notifyMessage = Notifier<ESMessagePtr>()
+    public let customMessage = Notifier<ESXPCCustomMessage>()
     
-}
-
-public protocol ESAsyncClient {
-    func subscribe(_ events: [es_event_type_t], completion: @escaping (es_return_t) -> Void)
-}
-
-public class ESXPCConnection: XPCProxyCreating, ESXPCClientProxy {
-    typealias T = ESXPCClientProxy
+    @Atomic var connection: NSXPCConnection
+    var messageDecodingFailStrategy: ((Error) -> ESAuthResolution)?
     
-    public var authMessage = EvaluationChain<ESMessagePtr, ESAuthResolution>()
-    public var notifyMessage = NotificationChain<ESMessagePtr>()
-    public var notifyStateChanged = NotificationChain<Result<es_new_client_result_t, Error>>()
     
-    public var messageDecodingFailStrategy: ((Error) -> ESAuthResolution)?
-    
-    public convenience init(_ createConnection: @escaping @autoclosure () -> NSXPCConnection) {
-        self.init(createConnection)
+    init(connection: NSXPCConnection) {
+        self.connection = connection
     }
     
-    public init(_ createConnection: @escaping () -> NSXPCConnection) {
-        _createConnection = createConnection
+    public func subscribe(_ events: [es_event_type_t], completion: @escaping (Result<Bool, Error>) -> Void) {
+        remoteObjectProxy(completion)?.subscribe(xpcEvents(events)) { completion(.success($0)) }
     }
     
-    public func activate() {
-        reconnect()
+    public func unsubscribe(_ events: [es_event_type_t], completion: @escaping (Result<Bool, Error>) -> Void) {
+        remoteObjectProxy(completion)?.unsubscribe(xpcEvents(events)) { completion(.success($0)) }
     }
     
-    public func remoteProxyObject(withErrorHandler handler: @escaping (Error) -> Void) -> ESXPCClientProxy {
-        self
+    public func unsubscribeAll(completion: @escaping (Result<Bool, Error>) -> Void) {
+        remoteObjectProxy(completion)?.unsubscribeAll { completion(.success($0)) }
     }
     
-    public func subscribe(_ events: [es_event_type_t], completion: @escaping (es_return_t) -> Void) {
-        
+    public func clearCache(completion: @escaping (Result<es_clear_cache_result_t, Error>) -> Void) {
+        remoteObjectProxy(completion)?.clearCache { completion(.success($0)) }
     }
     
-    
-    public func subscribe(_ events: [es_event_type_t], completion: @escaping (Result<es_return_t, Error>) -> Void) {
-        
+    public func muteProcess(_ mute: ESMuteProcess, completion: @escaping (Result<Bool, Error>) -> Void) {
+        guard let proxy = remoteObjectProxy(completion),
+              let data = xpcEncode(mute, completion)
+        else {
+            return
+        }
+        proxy.muteProcess(data) { completion(.success($0)) }
     }
     
-    public func unsubscribe(_ events: [es_event_type_t], completion: @escaping (Result<es_return_t, Error>) -> Void) {
-        
+    public func unmuteProcess(_ mute: ESMuteProcess, completion: @escaping (Result<Bool, Error>) -> Void) {
+        guard let proxy = remoteObjectProxy(completion),
+              let data = xpcEncode(mute, completion)
+        else {
+            return
+        }
+        proxy.unmuteProcess(data) { completion(.success($0)) }
     }
     
-    public func unsubscribeAll(completion: @escaping (Result<es_return_t, Error>) -> Void) {
-        
+    public func mutePath(prefix: String, completion: @escaping (Result<Bool, Error>) -> Void) {
+        remoteObjectProxy(completion)?.mutePath(prefix: prefix) { completion(.success($0)) }
     }
     
-    public func clearCache(events: [es_event_type_t], completion: @escaping (Result<es_return_t, Error>) -> Void) {
-        
+    public func mutePath(literal: String, completion: @escaping (Result<Bool, Error>) -> Void) {
+        remoteObjectProxy(completion)?.mutePath(literal: literal) { completion(.success($0)) }
     }
     
-    public func clearAllCache(completion: @escaping (Result<es_clear_cache_result_t, Error>) -> Void) {
-        
+    public func unmuteAllPaths(completion: @escaping (Result<Bool, Error>) -> Void) {
+        remoteObjectProxy(completion)?.unmuteAllPaths { completion(.success($0)) }
     }
     
-    public func muteProcess(_ mute: ESMuteProcess, completion: @escaping (Result<es_return_t, Error>) -> Void) {
-        
-    }
-    
-    public func unmuteProcess(_ mute: ESMuteProcess, completion: @escaping (Result<es_return_t, Error>) -> Void) {
-        
-    }
-    
-    public func unmuteAllProcesses(completion: @escaping (Result<es_return_t, Error>) -> Void) {
-        
-    }
-    
-    public func mutePath(prefix: String, completion: @escaping (Result<es_return_t, Error>) -> Void) {
-        
-    }
-    
-    public func mutePath(literal: String, completion: @escaping (Result<es_return_t, Error>) -> Void) {
-        
-    }
-    
-    public func unmuteAllPaths(completion: @escaping (Result<es_return_t, Error>) -> Void) {
-        
-    }
-    
-    public func custom(_ in: Data, completion: @escaping (_ out: Result<Data, Error>) -> Void) {
-        
+    public func custom(_ custom: ESXPCCustomMessage, completion: @escaping (Error?) -> Void) {
+        guard let proxy = remoteObjectProxy(completion) else { return }
+        proxy.custom(id: custom.id, payload: custom.payload, isReply: custom.isReply) {
+            completion(nil)
+        }
     }
     
     
     // MARK: Private
-    private let _createConnection: () -> NSXPCConnection
-    private var _connection: NSXPCConnection?
     
-    
-    private func reconnect() {
-        let connection = _createConnection()
-//        connection.remoteObjectInterface = .securityEngine
-        connection.resume()
-
-        let remoteObject = connection.remoteObjectProxyWithErrorHandler { [weak self] in
-            self?.handleConnect(.failure($0))
-        }
-        guard let proxy = remoteObject as? ESClientXPC else {
-            handleConnect(.failure(CommonError.unexpected("Failed cast \(remoteObject) to \(ESClientXPC.self)")))
-            return
-        }
-        
-        let delegate = ESClientXPCDelegateProxy(weakMain: self)
-        proxy.create(delegate: delegate) { [weak self] result in
-            self?.handleConnect(.success((result, connection)))
-        }
+    private func remoteObjectProxy<T>(_ errorHandler: @escaping (Result<T, Error>) -> Void) -> ESClientXPCProtocol? {
+        remoteObjectProxy { errorHandler(.failure($0)) }
     }
     
-    private func handleConnect(_ result: Result<(result: es_new_client_result_t, connection: NSXPCConnection), Error>) {
-        defer {
-            notifyStateChanged.notify(result.map(\.result))
+    private func remoteObjectProxy(_ errorHandler: @escaping (Error) -> Void) -> ESClientXPCProtocol? {
+        let remoteObject = connection.remoteObjectProxyWithErrorHandler {
+            errorHandler($0)
         }
-        
-        guard let value = result.value, value.result == ES_NEW_CLIENT_RESULT_SUCCESS else {
-            scheduleReconnect()
-            return
+        guard let proxy = remoteObject as? ESClientXPCProtocol else {
+            let error = CommonError.unexpected("Failed cast \(remoteObject) to \(ESClientXPCProtocol.self)")
+            errorHandler(error)
+            return nil
         }
-        
-        let invalidationHandler = { [weak self, weak connection = result.value?.connection] in
-            connection?.invalidationHandler = nil
-            connection?.interruptionHandler = nil
-            self?.reconnect()
-        }
-        value.connection.invalidationHandler = invalidationHandler
-        value.connection.interruptionHandler = invalidationHandler
-        
-        _connection = value.connection
+        return proxy
     }
     
-    private func scheduleReconnect() {
-        let reconnectDelay: TimeInterval = 3.0
-        DispatchQueue.global().asyncAfter(deadline: .now() + reconnectDelay, execute: reconnect)
+    private func xpcEvents(_ events: [es_event_type_t]) -> [NSNumber] {
+        events.map(\.rawValue).map(NSNumber.init)
+    }
+    
+    private func xpcEncode<T: Encodable, R>(_ value: T, _ completion: @escaping (Result<R, Error>) -> Void) -> Data? {
+        do {
+            return try JSONEncoder().encode(value)
+        } catch {
+            completion(.failure(error))
+            return nil
+        }
     }
 }
 
-class ESClientXPCDelegateProxy: NSObject, ESClientXPCDelegate {
-    private weak var _weakMain: ESXPCClient?
+public struct ESXPCCustomMessage {
+    public var id: UUID
+    public var payload: Data
+    public var isReply: Bool
     
-    init(weakMain: ESXPCClient) {
-        _weakMain = weakMain
+    public init(id: UUID, payload: Data, isReply: Bool) {
+        self.id = id
+        self.payload = payload
+        self.isReply = isReply
+    }
+}
+
+extension ESXPCCustomMessage {
+    public static func request(_ payload: Data) -> Self {
+        .init(id: UUID(), payload: payload, isReply: false)
     }
     
-    func handleAuth(_ message: ESMessagePtrXPC, reply: @escaping (UInt32, ESFileCacheOptions) -> Void) {
-        guard let main = _weakMain else { return reply(.max, []) }
-        
+    public static func response(id: UUID, payload: Data) -> Self {
+        .init(id: id, payload: payload, isReply: true)
+    }
+}
+
+extension ESXPCClient: ESClientXPCDelegateProtocol {
+    func handleAuth(_ message: ESMessagePtrXPC, reply: @escaping (UInt32, Bool) -> Void) {
         do {
             let decoded = try ESMessagePtr(data: message)
-            main.authMessage.evaluate(decoded) { resolutions in
-                
+            authMessage.async(decoded) { 
+                reply($0.result.rawValue, $0.cache)
             }
         } catch {
-            let resolution = main.messageDecodingFailStrategy?(error) ?? .allowOnce
-            reply(resolution.flags, resolution.cache)
+            let resolution = messageDecodingFailStrategy?(error) ?? .allowOnce
+            reply(resolution.result.rawValue, resolution.cache)
         }
         
     }
     
     func handleNotify(_ message: ESMessagePtrXPC) {
-        guard let main = _weakMain else { return }
-        
         do {
             let decoded = try ESMessagePtr(data: message)
-            main.notifyMessage.notify(decoded)
+            notifyMessage.notify(decoded)
         } catch {
-            _ = main.messageDecodingFailStrategy?(error)
+            _ = messageDecodingFailStrategy?(error)
         }
     }
-}
-
-extension ESAuthResolution {
-    var flags: UInt32 {
-        switch result {
-        case .auth(let value):
-            return value ? .max : 0
-        case .flags(let value):
-            return value
-        }
+    
+    func custom(id: UUID, payload: Data, isReply: Bool, reply: @escaping () -> Void) {
+        customMessage.notify(ESXPCCustomMessage(id: id, payload: payload, isReply: isReply))
     }
 }
-
-
-typealias ESMessagePtrXPC = Data
-typealias ESMuteProcessXPC = Data
-
-@objc
-protocol ESClientXPC {
-    func create(delegate: ESClientXPCDelegate, completion: @escaping (es_new_client_result_t) -> Void)
-    
-    func subscribe(_ events: [NSNumber], completion: @escaping (es_return_t) -> Void)
-    func unsubscribe(_ events: [NSNumber], completion: @escaping (es_return_t) -> Void)
-    func unsubscribeAll(completion: @escaping (es_return_t) -> Void)
-    func clearCache(events: [NSNumber], completion: @escaping (es_return_t) -> Void)
-    func clearAllCache(completion: @escaping (es_clear_cache_result_t) -> Void)
-    func muteProcess(_ mute: ESMuteProcessXPC, completion: @escaping (es_return_t) -> Void)
-    func unmuteProcess(_ mute: ESMuteProcessXPC, completion: @escaping (es_return_t) -> Void)
-    func unmuteAllProcesses(completion: @escaping (es_return_t) -> Void)
-    func mutePath(prefix: String, completion: @escaping (es_return_t) -> Void)
-    func mutePath(literal: String, completion: @escaping (es_return_t) -> Void)
-    func unmuteAllPaths(completion: @escaping (es_return_t) -> Void)
-    
-    func custom(_ in: Data, completion: @escaping (_ out: Data) -> Void)
-}
-
-@objc
-protocol ESClientXPCDelegate {
-    func handleAuth(_ message: ESMessagePtrXPC, reply: @escaping (UInt32, ESFileCacheOptions) -> Void)
-    func handleNotify(_ message: ESMessagePtrXPC)
-}
-
-
-extension ESMuteProcess {
-#warning("implement codable")
-    public init(from decoder: Decoder) throws {
-        fatalError()
-    }
-    
-    public func encode(to encoder: Encoder) throws {
-        fatalError()
-    }
-}
-*/
