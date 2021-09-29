@@ -51,8 +51,10 @@ public class ESClient {
     }
     
     deinit {
-        _ = es_unsubscribe_all(_client)
-        es_delete_client(_client)
+        if let client = _client {
+            _ = es_unsubscribe_all(client)
+            es_delete_client(client)
+        }
     }
     
     public func subscribe(_ events: [es_event_type_t]) -> Bool {
