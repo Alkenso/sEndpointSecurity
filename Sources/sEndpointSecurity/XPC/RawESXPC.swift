@@ -12,7 +12,7 @@ import Foundation
 typealias ESMessagePtrXPC = Data
 typealias ESMuteProcessXPC = Data
 
-@objc
+@objc(ESClientXPCProtocol)
 protocol ESClientXPCProtocol {
     func create(completion: @escaping (es_new_client_result_t) -> Void)
     
@@ -29,7 +29,7 @@ protocol ESClientXPCProtocol {
     func custom(id: UUID, payload: Data, isReply: Bool, reply: @escaping () -> Void)
 }
 
-@objc
+@objc(ESClientXPCDelegateProtocol)
 protocol ESClientXPCDelegateProtocol {
     func handleAuth(_ message: ESMessagePtrXPC, reply: @escaping (UInt32, Bool) -> Void)
     func handleNotify(_ message: ESMessagePtrXPC)
@@ -40,8 +40,6 @@ protocol ESClientXPCDelegateProtocol {
 extension NSXPCInterface {
     static var esClient: NSXPCInterface {
         let interface = NSXPCInterface(with: ESClientXPCProtocol.self)
-//        interface.setInterface(esClientDelegate, for: #selector(ESClientXPCProtocol.create(delegate:completion:)), argumentIndex: 0, ofReply: false)
-        
         return interface
     }
     
