@@ -14,7 +14,7 @@ import SwiftConvenience
 public class ESXPCService: NSObject {
     public var verifyConnectionHandler: ((audit_token_t) -> Bool)?
     public var receiveCustomMessageHandler: ((_ message: ESXPCCustomMessage, _ peer: UUID) -> Void)?
-    public var notifyErrorHandler: ((Error) -> Void)?
+    public var logErrorHandler: ((Error) -> Void)?
     
     
     public init(listener: NSXPCListener, createClient: @escaping () throws -> ESClient) {
@@ -49,7 +49,7 @@ extension ESXPCService: NSXPCListenerDelegate {
         newConnection.remoteObjectInterface = .esClientDelegate
         guard let delegate = newConnection.remoteObjectProxy as? ESClientXPCDelegateProtocol else {
             let error = CommonError.cast(newConnection.remoteObjectProxy, to: ESClientXPCDelegateProtocol.self)
-            notifyErrorHandler?(error)
+            logErrorHandler?(error)
             return false
         }
         
@@ -67,7 +67,7 @@ extension ESXPCService: NSXPCListenerDelegate {
             self?.receiveCustomMessageHandler?($0, clientID)
         }
         
-        client.notifyErrorHandler = notifyErrorHandler
+        client.logErrorHandler = logErrorHandler
         
         client.parentSubscription = _sendCustomMessage.register { [weak client] in
             guard let client = client, client.id == $0.peer else { return }
@@ -81,7 +81,7 @@ extension ESXPCService: NSXPCListenerDelegate {
 class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
     let id = UUID()
     var receiveCustomMessageHandler: ((ESXPCCustomMessage) -> Void)?
-    var notifyErrorHandler: ((Error) -> Void)?
+    var logErrorHandler: ((Error) -> Void)?
     var parentSubscription: Any?
     
     
@@ -214,12 +214,12 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
         
         let proxy = remoteObject.remoteObjectProxyWithErrorHandler { [weak self] in
             completion(.allowOnce)
-            self?.notifyErrorHandler?($0)
+            self?.logErrorHandler?($0)
         }
         
         guard let delegateProxy = proxy as? ESClientXPCDelegateProtocol else {
             completion(.allowOnce)
-            notifyErrorHandler?(
+            logErrorHandler?(
                 CommonError.fatal(
                     "Failed to cast \(proxy) to \(ESClientXPCDelegateProtocol.self)"
                 )
@@ -240,7 +240,7 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
         do {
             return try message.serialize()
         } catch {
-            notifyErrorHandler?(error)
+            logErrorHandler?(error)
             return nil
         }
     }
@@ -249,7 +249,7 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
         do {
             return try JSONDecoder().decode(ESMuteProcess.self, from: mute)
         } catch {
-            notifyErrorHandler?(error)
+            logErrorHandler?(error)
             return nil
         }
     }

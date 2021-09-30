@@ -10,18 +10,65 @@ import Foundation
 import SwiftConvenience
 
 
-public class ESXPCClient: NSObject {
+public class ESXPCClient {
     public let authMessage = TransformerOneToOne<ESMessagePtr, ESAuthResolution>(combine: ESAuthResolution.combine)
     public let notifyMessage = Notifier<ESMessagePtr>()
     public let customMessage = Notifier<ESXPCCustomMessage>()
     
-    @Atomic var connection: NSXPCConnection
-    var messageDecodingFailStrategy: ((Error) -> ESAuthResolution)?
+    public var connectionState = Notifier<Result<es_new_client_result_t, Error>>()
+    
+    public var reconnectOnFailure: Bool = true
+    public var logErrorHandler: ((Error) -> Void)?
+    
+    @Atomic private var _connection: ESXPCConnection
+    private let _delegate: ESClientXPCDelegate
     
     
-    init(connection: NSXPCConnection) {
-        self.connection = connection
+    // MARK: Initialization & Activation
+    
+    public convenience init(_ createConnection: @escaping @autoclosure () -> NSXPCConnection) {
+        self.init(createConnection)
     }
+    
+    public init(_ createConnection: @escaping () -> NSXPCConnection) {
+        let delegate = ESClientXPCDelegate()
+        _connection = ESXPCConnection(delegate: delegate, createConnection: createConnection)
+        _delegate = delegate
+    }
+    
+    deinit {
+        invalidate()
+    }
+    
+    public func activate(completion: @escaping (Result<es_new_client_result_t, Error>) -> Void) {
+        activate(async: true, completion: completion)
+    }
+    
+    public func activate() throws -> es_new_client_result_t {
+        var result: Result<es_new_client_result_t, Error>!
+        activate(async: false) { result = $0 }
+        return try result.get()
+    }
+    
+    public func invalidate() {
+        _connection.xpcConnection.invalidate()
+    }
+    
+    
+    private func activate(async: Bool, completion: @escaping (Result<es_new_client_result_t, Error>) -> Void) {
+        _delegate.authMessageHandler = { [authMessage] in authMessage.async($0, completion: $1) }
+        _delegate.notifyMessageHandler = notifyMessage.notify
+        _delegate.customMessageHandler = customMessage.notify
+        _delegate.errorLogHandler = logErrorHandler
+        
+        _connection.reconnectOnFailure = reconnectOnFailure
+        _connection.connectionStateHandler = connectionState.notify
+        
+        _connection.connect(async: async, notify: completion)
+    }
+    
+    
+    // MARK: ES Client
     
     public func subscribe(_ events: [es_event_type_t], completion: @escaping (Result<Bool, Error>) -> Void) {
         remoteObjectProxy(completion)?.subscribe(xpcEvents(events)) { completion(.success($0)) }
@@ -77,14 +124,12 @@ public class ESXPCClient: NSObject {
     }
     
     
-    // MARK: Private
-    
     private func remoteObjectProxy<T>(_ errorHandler: @escaping (Result<T, Error>) -> Void) -> ESClientXPCProtocol? {
         remoteObjectProxy { errorHandler(.failure($0)) }
     }
     
     private func remoteObjectProxy(_ errorHandler: @escaping (Error) -> Void) -> ESClientXPCProtocol? {
-        let remoteObject = connection.remoteObjectProxyWithErrorHandler {
+        let remoteObject = _connection.xpcConnection.remoteObjectProxyWithErrorHandler {
             errorHandler($0)
         }
         guard let proxy = remoteObject as? ESClientXPCProtocol else {
@@ -104,6 +149,7 @@ public class ESXPCClient: NSObject {
             return try JSONEncoder().encode(value)
         } catch {
             completion(.failure(error))
+            logErrorHandler?(error)
             return nil
         }
     }
@@ -131,16 +177,25 @@ extension ESXPCCustomMessage {
     }
 }
 
-extension ESXPCClient: ESClientXPCDelegateProtocol {
+    
+private class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
+    var authMessageHandler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void) -> Void)?
+    var notifyMessageHandler: ((ESMessagePtr) -> Void)?
+    var customMessageHandler: ((ESXPCCustomMessage) -> Void)?
+    
+    var errorLogHandler: ((Error) -> Void)?
+    
+    
     func handleAuth(_ message: ESMessagePtrXPC, reply: @escaping (UInt32, Bool) -> Void) {
         do {
             let decoded = try ESMessagePtr(data: message)
-            authMessage.async(decoded) { 
+            try authMessageHandler.get()(decoded) {
                 reply($0.result.rawValue, $0.cache)
             }
         } catch {
-            let resolution = messageDecodingFailStrategy?(error) ?? .allowOnce
+            let resolution = ESAuthResolution.allowOnce
             reply(resolution.result.rawValue, resolution.cache)
+            errorLogHandler?(error)
         }
         
     }
@@ -148,13 +203,13 @@ extension ESXPCClient: ESClientXPCDelegateProtocol {
     func handleNotify(_ message: ESMessagePtrXPC) {
         do {
             let decoded = try ESMessagePtr(data: message)
-            notifyMessage.notify(decoded)
+            notifyMessageHandler?(decoded)
         } catch {
-            _ = messageDecodingFailStrategy?(error)
+            errorLogHandler?(error)
         }
     }
     
     func custom(id: UUID, payload: Data, isReply: Bool, reply: @escaping () -> Void) {
-        customMessage.notify(ESXPCCustomMessage(id: id, payload: payload, isReply: isReply))
+        customMessageHandler?(ESXPCCustomMessage(id: id, payload: payload, isReply: isReply))
     }
 }

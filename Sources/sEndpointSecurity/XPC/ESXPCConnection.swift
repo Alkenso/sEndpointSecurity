@@ -10,19 +10,18 @@ import Foundation
 import SwiftConvenience
 
 
-public class ESXPCConnection {
-    public let client: ESXPCClient
-    public var connectionStateChange = Notifier<Result<es_new_client_result_t, Error>>()
+class ESXPCConnection {
+    @Atomic var xpcConnection: NSXPCConnection
     
-    public var reconnectOnFailure: Bool = true
-    public var messageDecodingFailStrategy: ((Error) -> ESAuthResolution)?
+    typealias ConnectResult = Result<es_new_client_result_t, Error>
+    var connectionStateHandler: ((ConnectResult) -> Void)?
+    
+    var reconnectOnFailure: Bool = true
     
     
-    public convenience init(_ createConnection: @escaping @autoclosure () -> NSXPCConnection) {
-        self.init(createConnection)
-    }
-    
-    public init(_ createConnection: @escaping () -> NSXPCConnection) {
+    init(delegate: ESClientXPCDelegateProtocol, createConnection: @escaping () -> NSXPCConnection) {
+        _delegate = delegate
+        
         let prepareConnection = { () -> NSXPCConnection in
             let connection = createConnection()
             connection.remoteObjectInterface = .esClient
@@ -32,48 +31,16 @@ public class ESXPCConnection {
         _createConnection = prepareConnection
         
         let dummyConnection = prepareConnection()
+        dummyConnection.resume()
         dummyConnection.invalidate()
-        client = ESXPCClient(connection: dummyConnection)
-        client.messageDecodingFailStrategy = { [weak self] in self?.messageDecodingFailStrategy?($0) ?? .allowOnce }
+        xpcConnection = dummyConnection
     }
     
-    deinit {
-        invalidate()
-    }
-    
-    public func activate(completion: @escaping (Result<es_new_client_result_t, Error>) -> Void) {
-        activate(async: true, completion: completion)
-    }
-    
-    public func activate() throws -> es_new_client_result_t {
-        var result: Result<es_new_client_result_t, Error>!
-        activate(async: false) { result = $0 }
-        return try result.get()
-    }
-    
-    public func invalidate() {
-        client.connection.invalidate()
-    }
-    
-    
-    // MARK: Private
-    private let _createConnection: () -> NSXPCConnection
-    
-    
-    private func activate(async: Bool, completion: @escaping (Result<es_new_client_result_t, Error>) -> Void) {
-        connect(async: async, notify: completion)
-    }
-    
-    private func reconnect() {
-        guard reconnectOnFailure else { return }
-        connect(async: true, notify: nil)
-    }
-    
-    private func connect(async: Bool, notify: ((Result<es_new_client_result_t, Error>) -> Void)?) {
+    func connect(async: Bool, notify: ((ConnectResult) -> Void)?) {
         let connection = _createConnection()
-        connection.exportedObject = client
+        connection.exportedObject = _delegate
         connection.resume()
-
+        
         let remoteObject = (async ? connection.remoteObjectProxyWithErrorHandler : connection.synchronousRemoteObjectProxyWithErrorHandler) { [weak self] in
             self?.handleConnect(.failure($0), notify: notify)
         }
@@ -87,31 +54,44 @@ public class ESXPCConnection {
             self?.handleConnect(.success(($0, connection)), notify: notify)
         }
     }
+    
+    
+    // MARK: Private
+    private let _delegate: ESClientXPCDelegateProtocol
+    private let _createConnection: () -> NSXPCConnection
+    
+    
+    private func reconnect() {
+        guard reconnectOnFailure else { return }
+        connect(async: true, notify: nil)
+    }
 
     private func handleConnect(
         _ result: Result<(result: es_new_client_result_t, connection: NSXPCConnection), Error>,
-        notify: ((Result<es_new_client_result_t, Error>) -> Void)?
+        notify: ((ConnectResult) -> Void)?
     ) {
         defer {
             let notifyResult = result.map(\.result)
             notify?(notifyResult)
-            connectionStateChange.notify(notifyResult)
+            connectionStateHandler?(notifyResult)
         }
-
+        
         guard let value = result.value, value.result == ES_NEW_CLIENT_RESULT_SUCCESS else {
             result.value?.connection.invalidate()
             scheduleReconnect()
             return
         }
         
-        value.connection.invalidationHandler = { [weak self, weak connection = result.value?.connection] in
+        result.value?.connection.invalidationHandler = { [weak self, weak connection = result.value?.connection] in
             connection?.invalidationHandler = nil
-            connection?.interruptionHandler = nil
             self?.reconnect()
         }
-        value.connection.interruptionHandler = { [weak connection = result.value?.connection] in connection?.invalidate() }
-
-        client.connection = value.connection
+        result.value?.connection.interruptionHandler = { [weak connection = result.value?.connection] in
+            connection?.interruptionHandler = nil
+            connection?.invalidate()
+        }
+        
+        xpcConnection = value.connection
     }
 
     private func scheduleReconnect() {
