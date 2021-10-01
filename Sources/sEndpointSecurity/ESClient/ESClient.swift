@@ -158,7 +158,9 @@ public class ESClient {
     private func applySideEffects(_ message: UnsafePointer<es_message_t>) {
         switch message.pointee.event_type {
         case ES_EVENT_TYPE_NOTIFY_EXIT:
-            _processMutes.unmute(message.pointee.process.pointee.audit_token)
+            let token = message.pointee.process.pointee.audit_token
+            _processMutes.unmute(token)
+            _cachedProcesses.removeValue(forKey: token)
         default:
             break
         }
@@ -170,7 +172,9 @@ public class ESClient {
             return found
         } else {
             let parsed = ESConverter(version: message.version).esProcess(message.process)
-            _cachedProcesses[token] = parsed
+            if parsed.executable.path != "/usr/libexec/xpcproxy" {
+                _cachedProcesses[token] = parsed
+            }
             return parsed
         }
     }
