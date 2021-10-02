@@ -1,9 +1,24 @@
+//  MIT License
 //
-//  File.swift
-//  
+//  Copyright (c) 2021 Alkenso (Vladimir Vashurkin)
 //
-//  Created by Alkenso (Vladimir Vashurkin) on 16.09.2021.
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
 //
+//  The above copyright notice and this permission notice shall be included in all
+//  copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//  SOFTWARE.
 
 import Combine
 import Foundation
@@ -17,6 +32,7 @@ public class ESClient {
     /// Perfonamce-sensitive handler, called **synchronously** for each message.
     /// Do as minimum work as possible.
     /// To filter processes, use mute/unmute process methods.
+    /// Provided ESProcess is cached and can be used to avoid parsing of whole message.
     public var messageFilter = TransformerOneToOne<(ESMessagePtr, ESProcess), Bool> { $0.reduce(true) { $0 && $1 } }
     
     public var authMessage = TransformerOneToOne<ESMessagePtr, ESAuthResolution>(combine: ESAuthResolution.combine)
@@ -24,9 +40,22 @@ public class ESClient {
     
     public var notifyMessage = Notifier<ESMessagePtr>()
     
+    public convenience init?(status: inout es_new_client_result_t) {
+        do {
+            try self.init()
+        } catch {
+            status = (error as? ESClientCreateError)?.status ?? ES_NEW_CLIENT_RESULT_ERR_INTERNAL
+            return nil
+        }
+    }
     
     public init() throws {
-        _timebaseInfo = try ESClientCreateError.catching { try mach_timebase_info.system() }
+        do {
+            _timebaseInfo = try mach_timebase_info.system()
+        } catch {
+            log("Failed to get timebase info: \(error)")
+            _timebaseInfo = nil
+        }
         
         let status = es_new_client(&_client) { [weak self] innerClient, message in
             let handled = self?.handleMessage(message) ?? false
@@ -36,18 +65,13 @@ public class ESClient {
         }
         
         guard status == ES_NEW_CLIENT_RESULT_SUCCESS else {
-            throw ESClientCreateError.create(status)
+            throw ESClientCreateError(status: status)
         }
         
-        let delete = DeinitAction { [_client] in es_delete_client(_client) }
-        
-        let mandatoryEvents = [
-            ES_EVENT_TYPE_NOTIFY_EXIT
+        _eventSubscriptions.mandatoryEvents = [
+            ES_EVENT_TYPE_NOTIFY_EXEC,
+            ES_EVENT_TYPE_NOTIFY_EXIT,
         ]
-        guard _eventSubscriptions.subscribeMandatory(mandatoryEvents) == ES_RETURN_SUCCESS else {
-            throw ESClientCreateError.subscribe
-        }
-        delete.release()
     }
     
     deinit {
@@ -95,8 +119,9 @@ public class ESClient {
     
     
     // MARK: Private
+    private let _queue = DispatchQueue(label: "ESClient.event.queue")
     private var _client: OpaquePointer!
-    private let _timebaseInfo: mach_timebase_info
+    private let _timebaseInfo: mach_timebase_info?
     private lazy var _eventSubscriptions = EventSubscriptions(esClient: _client)
     private lazy var _processMutes = ProcessMutes(esClient: _client)
     private var _cachedProcesses: [audit_token_t: ESProcess] = [:]
@@ -108,19 +133,23 @@ public class ESClient {
         return _processMutes.isMuted(process)
     }
     
-    private func handleMessage(_ message: UnsafePointer<es_message_t>) -> Bool {
-        let isSubscribed = _eventSubscriptions.isSubscribed(message.pointee.event_type)
-        if _eventSubscriptions.isSubscribed(message.pointee.event_type) {
-            processMessage(message)
+    private func handleMessage(_ rawMessage: UnsafePointer<es_message_t>) -> Bool {
+        let isSubscribed = _eventSubscriptions.isSubscribed(rawMessage.pointee.event_type)
+        if isSubscribed {
+            let message = ESMessagePtr(message: rawMessage)
+            _queue.async {
+                self.processMessage(message)
+            }
+        } else {
+            applySideEffects(rawMessage)
         }
-        
-        applySideEffects(message)
         
         return isSubscribed
     }
     
-    private func processMessage(_ rawMessage: UnsafePointer<es_message_t>) {
-        let message = ESMessagePtr(message: rawMessage)
+    private func processMessage(_ message: ESMessagePtr) {
+        defer { applySideEffects(message.unsafeRawMessage) }
+        
         let isMuted = shoudMuteMessage(message)
         
         switch message.action_type {
@@ -133,6 +162,7 @@ public class ESClient {
             let item = scheduleCancel(for: message) {
                 self.respond(message, resolution: .allowOnce, reason: .timeout)
             }
+            
             authMessage.async(message) {
                 self.respond(message, resolution: $0, reason: .normal, timeoutItem: item)
             }
@@ -140,6 +170,7 @@ public class ESClient {
             guard !isMuted else { return }
             notifyMessage.notify(message)
         default:
+            log("Unknown es_action type = \(message.action_type)")
             break
         }
     }
@@ -160,7 +191,7 @@ public class ESClient {
         case ES_EVENT_TYPE_NOTIFY_EXIT:
             let token = message.pointee.process.pointee.audit_token
             _processMutes.unmute(token)
-            _cachedProcesses.removeValue(forKey: token)
+            _queue.async { self._cachedProcesses.removeValue(forKey: token) }
         default:
             break
         }
@@ -172,16 +203,23 @@ public class ESClient {
             return found
         } else {
             let parsed = ESConverter(version: message.version).esProcess(message.process)
-            if parsed.executable.path != "/usr/libexec/xpcproxy" {
+            let type = message.event_type
+            let cache = !(
+                type == ES_EVENT_TYPE_AUTH_EXEC ||
+                type == ES_EVENT_TYPE_NOTIFY_EXEC ||
+                type == ES_EVENT_TYPE_NOTIFY_EXIT
+            )
+            if cache && !parsed.isXpcProxy {
                 _cachedProcesses[token] = parsed
             }
             return parsed
         }
     }
     
-    private func scheduleCancel(for message: ESMessagePtr, cancellation: @escaping () -> Void) -> DispatchWorkItem {
+    private func scheduleCancel(for message: ESMessagePtr, cancellation: @escaping () -> Void) -> DispatchWorkItem? {
+        guard let timebaseInfo = _timebaseInfo else { return nil }
         let machInterval = message.deadline - message.mach_time
-        let fullInterval = TimeInterval(machTime: machInterval, timebase: _timebaseInfo)
+        let fullInterval = TimeInterval(machTime: machInterval, timebase: timebaseInfo)
         
         let interval: TimeInterval
         switch config.messageTimeout {
@@ -221,12 +259,8 @@ public extension ESClient {
     }
 }
 
-private extension ESClientCreateError {
-    static func catching<R>(_ body: () throws -> R) rethrows -> R {
-        do {
-            return try body()
-        } catch {
-            throw ESClientCreateError.other(error)
-        }
+private extension ESProcess {
+    var isXpcProxy: Bool {
+        executable.path == "/usr/libexec/xpcproxy"
     }
 }

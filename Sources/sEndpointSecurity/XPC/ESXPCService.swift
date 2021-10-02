@@ -1,9 +1,24 @@
+//  MIT License
 //
-//  File.swift
-//  
+//  Copyright (c) 2021 Alkenso (Vladimir Vashurkin)
 //
-//  Created by Alkenso (Vladimir Vashurkin) on 27.09.2021.
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
 //
+//  The above copyright notice and this permission notice shall be included in all
+//  copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//  SOFTWARE.
 
 import Combine
 import EndpointSecurity
@@ -14,7 +29,6 @@ import SwiftConvenience
 public class ESXPCService: NSObject {
     public var verifyConnectionHandler: ((audit_token_t) -> Bool)?
     public var receiveCustomMessageHandler: ((_ message: ESXPCCustomMessage, _ peer: UUID) -> Void)?
-    public var logErrorHandler: ((Error) -> Void)?
     
     
     public init(listener: NSXPCListener, createClient: @escaping () throws -> ESClient) {
@@ -27,7 +41,7 @@ public class ESXPCService: NSObject {
     }
     
     public func activate() {
-        _listener.resume()
+        _listener.resume() 
     }
     
     public func sendCustomMessage(_ message: ESXPCCustomMessage, to peer: UUID) {
@@ -49,7 +63,7 @@ extension ESXPCService: NSXPCListenerDelegate {
         newConnection.remoteObjectInterface = .esClientDelegate
         guard let delegate = newConnection.remoteObjectProxy as? ESClientXPCDelegateProtocol else {
             let error = CommonError.cast(newConnection.remoteObjectProxy, to: ESClientXPCDelegateProtocol.self)
-            logErrorHandler?(error)
+            log("Failed to accept new connection. Error: \(error)")
             return false
         }
         
@@ -67,8 +81,6 @@ extension ESXPCService: NSXPCListenerDelegate {
             self?.receiveCustomMessageHandler?($0, clientID)
         }
         
-        client.logErrorHandler = logErrorHandler
-        
         client.parentSubscription = _sendCustomMessage.register { [weak client] in
             guard let client = client, client.id == $0.peer else { return }
             client.sendCustomMessage($0.message)
@@ -81,7 +93,6 @@ extension ESXPCService: NSXPCListenerDelegate {
 class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
     let id = UUID()
     var receiveCustomMessageHandler: ((ESXPCCustomMessage) -> Void)?
-    var logErrorHandler: ((Error) -> Void)?
     var parentSubscription: Any?
     
     
@@ -106,8 +117,9 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
             .store(in: &_cancellables)
             
             client.notifyMessage.register(on: _queue) { [weak self] in
-                guard let xpcMessage = self?.encodeMessage($0) else { return }
-                self?._delegate.handleNotify(xpcMessage)
+                guard let self = self else { return }
+                guard let xpcMessage = self.encodeMessage($0) else { return }
+                self._delegate.handleNotify(xpcMessage)
             }
             .store(in: &_cancellables)
             
@@ -118,8 +130,8 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
             
             completion(ES_NEW_CLIENT_RESULT_SUCCESS)
         } catch {
-            if case let .create(status) = error as? ESClientCreateError {
-                completion(status)
+            if let error = error as? ESClientCreateError {
+                completion(error.status)
             } else {
                 completion(ES_NEW_CLIENT_RESULT_ERR_INTERNAL)
             }
@@ -209,21 +221,21 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
     ) {
         guard let remoteObject = _delegate as? NSXPCProxyCreating else {
             completion(.allowOnce)
+            let error = CommonError.cast(_delegate, to: NSXPCProxyCreating.self)
+            log("handleAuthMessage failed. Error: \(error)")
             return
         }
         
-        let proxy = remoteObject.remoteObjectProxyWithErrorHandler { [weak self] in
+        let proxy = remoteObject.remoteObjectProxyWithErrorHandler {
+            log("handleAuthMessage failed. Error: \($0)")
             completion(.allowOnce)
-            self?.logErrorHandler?($0)
         }
         
         guard let delegateProxy = proxy as? ESClientXPCDelegateProtocol else {
+            let error = CommonError.cast(proxy, to: ESClientXPCDelegateProtocol.self)
+            log("handleAuthMessage failed. Error: \(error)")
+            
             completion(.allowOnce)
-            logErrorHandler?(
-                CommonError.fatal(
-                    "Failed to cast \(proxy) to \(ESClientXPCDelegateProtocol.self)"
-                )
-            )
             return
         }
         
@@ -238,9 +250,9 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
     
     private func encodeMessage(_ message: ESMessagePtr) -> ESMessagePtrXPC? {
         do {
-            return try message.serialize()
+            return try message.serialized()
         } catch {
-            logErrorHandler?(error)
+            log("encodeMessage failed. Error: \(error)")
             return nil
         }
     }
@@ -249,7 +261,7 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
         do {
             return try JSONDecoder().decode(ESMuteProcess.self, from: mute)
         } catch {
-            logErrorHandler?(error)
+            log("decodeMute failed. Error: \(error)")
             return nil
         }
     }

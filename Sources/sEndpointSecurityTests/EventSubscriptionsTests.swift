@@ -1,3 +1,25 @@
+//  MIT License
+//
+//  Copyright (c) 2021 Alkenso (Vladimir Vashurkin)
+//
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
+//
+//  The above copyright notice and this permission notice shall be included in all
+//  copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//  SOFTWARE.
+
 @testable import sEndpointSecurity
 
 import EndpointSecurity
@@ -11,6 +33,7 @@ class EventSubscribeTests: XCTestCase {
     var subscribedEvents: [es_event_type_t] = []
     var subscribeFails = false
     var unsubscribeFails = false
+    var unsubscribeAllFails = false
     
     lazy var subscriptions = EventSubscriptions(
         esSubscribe: {
@@ -22,6 +45,11 @@ class EventSubscribeTests: XCTestCase {
             guard !self.unsubscribeFails else { return ES_RETURN_ERROR }
             self.subscribedEvents.removeAll(where: $0.contains)
             return ES_RETURN_SUCCESS
+        },
+        esUnsubscribeAll: {
+            guard !self.unsubscribeAllFails else { return ES_RETURN_ERROR }
+            self.subscribedEvents.removeAll()
+            return ES_RETURN_SUCCESS
         }
     )
     
@@ -29,6 +57,7 @@ class EventSubscribeTests: XCTestCase {
         subscribedEvents = []
         subscribeFails = false
         unsubscribeFails = false
+        unsubscribeAllFails = false
     }
     
     func test_typicalUseCase() {
@@ -38,41 +67,48 @@ class EventSubscribeTests: XCTestCase {
             ES_EVENT_TYPE_NOTIFY_REMOUNT,
             ES_EVENT_TYPE_NOTIFY_UNMOUNT,
         ]
-        XCTAssertEqual(subscriptions.subscribeMandatory(mandatory), ES_RETURN_SUCCESS)
-        XCTAssertTrue(subscribedEvents.containsUniquely(mandatory))
-        //  But as for usual point of view there is no subscriptions
-        for event in mandatory {
-            XCTAssertFalse(subscriptions.isSubscribed(event))
-        }
+        subscriptions.mandatoryEvents = mandatory
         
-        //  usual subscribe for events
-        let usual = [
+        //  Initially no events are subscribed
+        XCTAssertTrue(subscribedEvents.isEmpty)
+        
+        let events = [
             ES_EVENT_TYPE_AUTH_EXEC,
             ES_EVENT_TYPE_NOTIFY_REMOUNT, // exists also in 'mandatory'
             ES_EVENT_TYPE_NOTIFY_UNMOUNT, // exists also in 'mandatory'
         ]
-        XCTAssertEqual(subscriptions.subscribe(usual), ES_RETURN_SUCCESS)
-        XCTAssertTrue(subscribedEvents.containsUniquely(usual))
-        for event in usual {
-            XCTAssertTrue(subscriptions.isSubscribed(event))
-        }
+        XCTAssertEqual(subscriptions.subscribe(events), ES_RETURN_SUCCESS)
         
-        //  usual unsubscribe affects only usual subscriptions
-        XCTAssertEqual(subscriptions.unsubscribe([ES_EVENT_TYPE_NOTIFY_REMOUNT]), ES_RETURN_SUCCESS)
-        //  but in general event is not unsubscribed (mandatory still holds a subscription)
-        XCTAssertTrue(subscribedEvents.contains(ES_EVENT_TYPE_NOTIFY_REMOUNT))
-        //  and subscription is not active anymore
-        XCTAssertFalse(subscriptions.isSubscribed(ES_EVENT_TYPE_NOTIFY_REMOUNT))
-        //  when mandatory also unsubscribes, the event is fully unsubscribed
-        XCTAssertEqual(subscriptions.unsubscribeMandatory([ES_EVENT_TYPE_NOTIFY_REMOUNT]), ES_RETURN_SUCCESS)
-        XCTAssertFalse(subscribedEvents.contains(ES_EVENT_TYPE_NOTIFY_REMOUNT))
+        //  First subscription subscribes on events + mandatory events
+        XCTAssertTrue(subscribedEvents.containsUniquely([
+            ES_EVENT_TYPE_AUTH_EXEC, // exists in 'events'
+            ES_EVENT_TYPE_NOTIFY_MOUNT, // exists in 'mandatory'
+            ES_EVENT_TYPE_NOTIFY_REMOUNT, // exists also in 'events' and 'mandatory'
+            ES_EVENT_TYPE_NOTIFY_UNMOUNT, // exists also in 'events' and 'mandatory'
+        ]))
         
-        //  mandatory unsubscribe affects only mandatory subscriptions
-        XCTAssertEqual(subscriptions.unsubscribeMandatory([ES_EVENT_TYPE_NOTIFY_UNMOUNT]), ES_RETURN_SUCCESS)
-        //  but in general event is not unsubscribed
-        XCTAssertTrue(subscribedEvents.contains(ES_EVENT_TYPE_NOTIFY_UNMOUNT))
-        //  and subscription is still active in general (for usual case)
+        XCTAssertTrue(subscriptions.isSubscribed(ES_EVENT_TYPE_AUTH_EXEC))
+        XCTAssertTrue(subscriptions.isSubscribed(ES_EVENT_TYPE_NOTIFY_REMOUNT))
         XCTAssertTrue(subscriptions.isSubscribed(ES_EVENT_TYPE_NOTIFY_UNMOUNT))
+        
+        //  But as for usual point of view there is no subscription
+        XCTAssertFalse(subscriptions.isSubscribed(ES_EVENT_TYPE_NOTIFY_MOUNT))
+        
+        
+        //  Unsubscribe on non-mandatory event
+        XCTAssertEqual(subscriptions.unsubscribe([ES_EVENT_TYPE_AUTH_EXEC]), ES_RETURN_SUCCESS)
+        XCTAssertFalse(subscriptions.isSubscribed(ES_EVENT_TYPE_AUTH_EXEC))
+        XCTAssertFalse(subscribedEvents.contains(ES_EVENT_TYPE_AUTH_EXEC))
+        
+        //  Unsubscribe on mandatory event
+        XCTAssertEqual(subscriptions.unsubscribe([ES_EVENT_TYPE_NOTIFY_REMOUNT]), ES_RETURN_SUCCESS)
+        XCTAssertFalse(subscriptions.isSubscribed(ES_EVENT_TYPE_NOTIFY_REMOUNT))
+        XCTAssertTrue(subscribedEvents.contains(ES_EVENT_TYPE_NOTIFY_REMOUNT))
+        
+        //  Unsubscribe on last of subscribed event cause 'unsubscribeAll'
+        XCTAssertEqual(subscriptions.unsubscribe([ES_EVENT_TYPE_NOTIFY_UNMOUNT]), ES_RETURN_SUCCESS)
+        XCTAssertFalse(subscriptions.isSubscribed(ES_EVENT_TYPE_NOTIFY_UNMOUNT))
+        XCTAssertTrue(subscribedEvents.isEmpty)
     }
     
     func test_initialEmpty() {
@@ -107,28 +143,16 @@ class EventSubscribeTests: XCTestCase {
         XCTAssertTrue(subscribedEvents.isEmpty)
     }
     
-    func test_mandatory_subscribeUnsubscribe() {
+    func test_subscribeUnsubscribeAll() {
+        subscriptions.mandatoryEvents = [ES_EVENT_TYPE_NOTIFY_MOUNT]
         let events = [
             ES_EVENT_TYPE_NOTIFY_MOUNT,
-            ES_EVENT_TYPE_NOTIFY_REMOUNT,
             ES_EVENT_TYPE_NOTIFY_UNMOUNT,
         ]
-        XCTAssertEqual(subscriptions.subscribeMandatory(events), ES_RETURN_SUCCESS)
+        XCTAssertEqual(subscriptions.subscribe(events), ES_RETURN_SUCCESS)
         XCTAssertTrue(subscribedEvents.containsUniquely(events))
         
-        XCTAssertEqual(
-            subscriptions.unsubscribeMandatory(
-                [ES_EVENT_TYPE_NOTIFY_UNMOUNT]
-            ),
-            ES_RETURN_SUCCESS
-        )
-        XCTAssertTrue(
-            subscribedEvents.containsUniquely(
-                [ES_EVENT_TYPE_NOTIFY_MOUNT, ES_EVENT_TYPE_NOTIFY_REMOUNT]
-            )
-        )
-        
-        XCTAssertEqual(subscriptions.unsubscribeMandatoryAll(), ES_RETURN_SUCCESS)
+        XCTAssertEqual(subscriptions.unsubscribeAll(), ES_RETURN_SUCCESS)
         XCTAssertTrue(subscribedEvents.isEmpty)
     }
     
@@ -151,25 +175,13 @@ class EventSubscribeTests: XCTestCase {
         //  Event is not removed from subscriptions
         XCTAssertTrue(subscribedEvents.contains(ES_EVENT_TYPE_NOTIFY_MOUNT))
         XCTAssertTrue(subscriptions.isSubscribed(ES_EVENT_TYPE_NOTIFY_MOUNT))
-    }
-    
-    func test_mandatory_subscribeUnsubscribe_esFails() {
-        let events = [
-            ES_EVENT_TYPE_NOTIFY_MOUNT,
-            ES_EVENT_TYPE_NOTIFY_REMOUNT,
-        ]
-        XCTAssertEqual(subscriptions.subscribeMandatory(events), ES_RETURN_SUCCESS)
-        XCTAssertTrue(subscribedEvents.containsUniquely(events))
         
-        subscribeFails = true
-        XCTAssertEqual(subscriptions.subscribeMandatory([ES_EVENT_TYPE_NOTIFY_EXIT]), ES_RETURN_ERROR)
-        //  Event is not added to subscriptions
-        XCTAssertFalse(subscribedEvents.contains(ES_EVENT_TYPE_NOTIFY_EXIT))
-        
-        unsubscribeFails = true
-        XCTAssertEqual(subscriptions.unsubscribeMandatory([ES_EVENT_TYPE_NOTIFY_MOUNT]), ES_RETURN_ERROR)
+        unsubscribeAllFails = true
+        XCTAssertEqual(subscriptions.unsubscribeAll(), ES_RETURN_ERROR)
         //  Event is not removed from subscriptions
-        XCTAssertTrue(subscribedEvents.contains(ES_EVENT_TYPE_NOTIFY_MOUNT))
+        XCTAssertTrue(subscribedEvents.containsUniquely(events))
+        XCTAssertTrue(subscriptions.isSubscribed(ES_EVENT_TYPE_NOTIFY_MOUNT))
+        XCTAssertTrue(subscriptions.isSubscribed(ES_EVENT_TYPE_NOTIFY_REMOUNT))
     }
 }
 

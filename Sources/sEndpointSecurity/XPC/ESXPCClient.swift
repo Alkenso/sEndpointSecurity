@@ -1,9 +1,24 @@
+//  MIT License
 //
-//  File.swift
-//  
+//  Copyright (c) 2021 Alkenso (Vladimir Vashurkin)
 //
-//  Created by Alkenso (Vladimir Vashurkin) on 27.09.2021.
+//  Permission is hereby granted, free of charge, to any person obtaining a copy
+//  of this software and associated documentation files (the "Software"), to deal
+//  in the Software without restriction, including without limitation the rights
+//  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//  copies of the Software, and to permit persons to whom the Software is
+//  furnished to do so, subject to the following conditions:
 //
+//  The above copyright notice and this permission notice shall be included in all
+//  copies or substantial portions of the Software.
+//
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//  SOFTWARE.
 
 import EndpointSecurity
 import Foundation
@@ -16,9 +31,6 @@ public class ESXPCClient {
     public let customMessage = Notifier<ESXPCCustomMessage>()
     
     public var connectionState = Notifier<Result<es_new_client_result_t, Error>>()
-    
-    public var reconnectOnFailure: Bool = true
-    public var logErrorHandler: ((Error) -> Void)?
     
     @Atomic private var _connection: ESXPCConnection
     private let _delegate: ESClientXPCDelegate
@@ -51,7 +63,7 @@ public class ESXPCClient {
     }
     
     public func invalidate() {
-        _connection.xpcConnection.invalidate()
+        _connection.invalidate()
     }
     
     
@@ -59,9 +71,7 @@ public class ESXPCClient {
         _delegate.authMessageHandler = { [authMessage] in authMessage.async($0, completion: $1) }
         _delegate.notifyMessageHandler = notifyMessage.notify
         _delegate.customMessageHandler = customMessage.notify
-        _delegate.errorLogHandler = logErrorHandler
         
-        _connection.reconnectOnFailure = reconnectOnFailure
         _connection.connectionStateHandler = connectionState.notify
         
         _connection.connect(async: async, notify: completion)
@@ -117,7 +127,7 @@ public class ESXPCClient {
     }
     
     public func custom(_ custom: ESXPCCustomMessage, completion: @escaping (Error?) -> Void) {
-        guard let proxy = remoteObjectProxy(completion) else { return }
+        guard let proxy = _connection.remoteObjectProxy(completion) else { return }
         proxy.custom(id: custom.id, payload: custom.payload, isReply: custom.isReply) {
             completion(nil)
         }
@@ -125,19 +135,7 @@ public class ESXPCClient {
     
     
     private func remoteObjectProxy<T>(_ errorHandler: @escaping (Result<T, Error>) -> Void) -> ESClientXPCProtocol? {
-        remoteObjectProxy { errorHandler(.failure($0)) }
-    }
-    
-    private func remoteObjectProxy(_ errorHandler: @escaping (Error) -> Void) -> ESClientXPCProtocol? {
-        let remoteObject = _connection.xpcConnection.remoteObjectProxyWithErrorHandler {
-            errorHandler($0)
-        }
-        guard let proxy = remoteObject as? ESClientXPCProtocol else {
-            let error = CommonError.unexpected("Failed cast \(remoteObject) to \(ESClientXPCProtocol.self)")
-            errorHandler(error)
-            return nil
-        }
-        return proxy
+        _connection.remoteObjectProxy { errorHandler(.failure($0)) }
     }
     
     private func xpcEvents(_ events: [es_event_type_t]) -> [NSNumber] {
@@ -149,7 +147,7 @@ public class ESXPCClient {
             return try JSONEncoder().encode(value)
         } catch {
             completion(.failure(error))
-            logErrorHandler?(error)
+            log("Failed to encode \(T.self): \(error)")
             return nil
         }
     }
@@ -195,7 +193,7 @@ private class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
         } catch {
             let resolution = ESAuthResolution.allowOnce
             reply(resolution.result.rawValue, resolution.cache)
-            errorLogHandler?(error)
+            log("Failed to decode ESMessagePtr from auth event data. Error: \(error)")
         }
         
     }
@@ -205,7 +203,7 @@ private class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
             let decoded = try ESMessagePtr(data: message)
             notifyMessageHandler?(decoded)
         } catch {
-            errorLogHandler?(error)
+            log("Failed to decode ESMessagePtr from notify event data. Error: \(error)")
         }
     }
     
