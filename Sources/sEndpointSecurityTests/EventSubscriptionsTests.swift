@@ -26,7 +26,6 @@ import EndpointSecurity
 import Foundation
 import SwiftConvenience
 import XCTest
-import sMock
 
 
 class EventSubscribeTests: XCTestCase {

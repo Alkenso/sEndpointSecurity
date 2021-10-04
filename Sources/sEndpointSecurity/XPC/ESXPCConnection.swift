@@ -106,9 +106,9 @@ class ESXPCConnection {
             connectionStateHandler?(notifyResult)
         }
         
-        guard let value = result.value, value.result == ES_NEW_CLIENT_RESULT_SUCCESS else {
+        guard let value = result.success, value.result == ES_NEW_CLIENT_RESULT_SUCCESS else {
             log("Connect failed with result = \(result)")
-            result.value?.connection.invalidate()
+            result.success?.connection.invalidate()
             scheduleReconnect()
             return
         }
