@@ -14,8 +14,8 @@ sEndpointSecurity is Swift wrapper around ES C API and was written with three ma
 
 If first two are obvious, the third one requires a bit of additional explanation.
 When you subscribes to file authentication events, that means **nobody** can access the file before the client returns resolution for it.
-And what debugger does? On breakpoint, it suspends the application (the client) and prevent it from responding to any events.
-This cause whole OS to hang until the client will be killed by ES.kext from the Kernel.
+And what debugger does? On breakpoint, it suspends the application (the client) and prevent it from responding any events.
+This cause whole OS to hang until the client is killed by EndpontSecurity.kext from the Kernel.
 
 sEndpointSecurity provides approach to deal with debugging - XPC wrapper around ES client.
 So we move events receiving and responding to another process and deal with it over XPC. That allows us to debug the application.
