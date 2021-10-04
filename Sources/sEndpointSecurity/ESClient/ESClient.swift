@@ -40,7 +40,7 @@ public class ESClient {
     
     public var notifyMessage = Notifier<ESMessagePtr>()
     
-    public convenience init?(status: inout es_new_client_result_t) {
+    public convenience init?(status: inout es_new_client_result_t?) {
         do {
             try self.init()
         } catch {

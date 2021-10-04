@@ -81,7 +81,7 @@ extension ESXPCService: NSXPCListenerDelegate {
             self?.receiveCustomMessageHandler?($0, clientID)
         }
         
-        client.parentSubscription = _sendCustomMessage.register { [weak client] in
+        client.parentSubscription = _sendCustomMessage.subscribe { [weak client] in
             guard let client = client, client.id == $0.peer else { return }
             client.sendCustomMessage($0.message)
         }
@@ -110,20 +110,20 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
             let client = try _createClient()
             defer { _client = client }
             
-            client.authMessage.register(on: _queue) { [weak self] message, authCompletion in
+            client.authMessage.subscribe(on: _queue) { [weak self] message, authCompletion in
                 guard let self = self else { return authCompletion(.allowOnce) }
                 self.handleAuthMessage(message, completion: authCompletion)
             }
             .store(in: &_cancellables)
             
-            client.notifyMessage.register(on: _queue) { [weak self] in
+            client.notifyMessage.subscribe(on: _queue) { [weak self] in
                 guard let self = self else { return }
                 guard let xpcMessage = self.encodeMessage($0) else { return }
                 self._delegate.handleNotify(xpcMessage)
             }
             .store(in: &_cancellables)
             
-            _sendCustomMessage.register { [weak self] in
+            _sendCustomMessage.subscribe { [weak self] in
                 self?._delegate.custom(id: $0.id, payload: $0.payload, isReply: $0.isReply) {}
             }
             .store(in: &_cancellables)
