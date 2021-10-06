@@ -40,6 +40,7 @@ public class ESClient {
     
     public var notifyMessage = Notifier<ESMessagePtr>()
     
+    
     public convenience init?(status: inout es_new_client_result_t?) {
         do {
             try self.init()
@@ -58,8 +59,9 @@ public class ESClient {
         }
         
         let status = es_new_client(&_client) { [weak self] innerClient, message in
-            let handled = self?.handleMessage(message) ?? false
-            if !handled {
+            if let self = self {
+                self.handleMessage(message)
+            } else {
                 _ = innerClient.esFallback(message)
             }
         }
@@ -68,10 +70,7 @@ public class ESClient {
             throw ESClientCreateError(status: status)
         }
         
-        _eventSubscriptions.mandatoryEvents = [
-            ES_EVENT_TYPE_NOTIFY_EXEC,
-            ES_EVENT_TYPE_NOTIFY_EXIT,
-        ]
+        _processMutes.scheduleCleanup(on: _queue, interval: 10.0)
     }
     
     deinit {
@@ -82,15 +81,15 @@ public class ESClient {
     }
     
     public func subscribe(_ events: [es_event_type_t]) -> Bool {
-        _eventSubscriptions.subscribe(events) == ES_RETURN_SUCCESS
+        _client.esSubscribe(events) == ES_RETURN_SUCCESS
     }
     
     public func unsubscribe(_ events: [es_event_type_t]) -> Bool {
-        _eventSubscriptions.unsubscribe(events) == ES_RETURN_SUCCESS
+        _client.esUnsubscribe(events) == ES_RETURN_SUCCESS
     }
     
     public func unsubscribeAll() -> Bool {
-        _eventSubscriptions.unsubscribeAll() == ES_RETURN_SUCCESS
+        es_unsubscribe_all(_client) == ES_RETURN_SUCCESS
     }
     
     public func clearCache() -> es_clear_cache_result_t {
@@ -98,11 +97,11 @@ public class ESClient {
     }
     
     public func muteProcess(_ mute: ESMuteProcess) -> Bool {
-        _processMutes.mute(mute) == ES_RETURN_SUCCESS
+        _queue.sync { _processMutes.mute(mute) == ES_RETURN_SUCCESS }
     }
     
     public func unmuteProcess(_ mute: ESMuteProcess) -> Bool {
-        _processMutes.unmute(mute) == ES_RETURN_SUCCESS
+        _queue.sync { _processMutes.unmute(mute) == ES_RETURN_SUCCESS }
     }
     
     public func mutePath(prefix: String) -> Bool {
@@ -119,37 +118,26 @@ public class ESClient {
     
     
     // MARK: Private
-    private let _queue = DispatchQueue(label: "ESClient.event.queue")
+    private let _queue = DispatchQueue(label: "ESClient.event.queue", qos: .userInteractive)
     private var _client: OpaquePointer!
     private let _timebaseInfo: mach_timebase_info?
-    private lazy var _eventSubscriptions = EventSubscriptions(esClient: _client)
     private lazy var _processMutes = ProcessMutes(esClient: _client)
-    private var _cachedProcesses: [audit_token_t: ESProcess] = [:]
     
     
     private func shoudMuteMessage(_ message: ESMessagePtr) -> Bool {
-        let process = findProcess(for: message)
+        let process =  ESConverter(version: message.version).esProcess(message.process)
         guard messageFilter.sync((message, process)) != false else { return false }
         return _processMutes.isMuted(process)
     }
     
-    private func handleMessage(_ rawMessage: UnsafePointer<es_message_t>) -> Bool {
-        let isSubscribed = _eventSubscriptions.isSubscribed(rawMessage.pointee.event_type)
-        if isSubscribed {
-            let message = ESMessagePtr(message: rawMessage)
-            _queue.async {
-                self.processMessage(message)
-            }
-        } else {
-            applySideEffects(rawMessage)
+    private func handleMessage(_ rawMessage: UnsafePointer<es_message_t>) {
+        let message = ESMessagePtr(message: rawMessage)
+        _queue.async {
+            self.processMessage(message)
         }
-        
-        return isSubscribed
     }
     
     private func processMessage(_ message: ESMessagePtr) {
-        defer { applySideEffects(message.unsafeRawMessage) }
-        
         let isMuted = shoudMuteMessage(message)
         
         switch message.action_type {
@@ -175,45 +163,13 @@ public class ESClient {
         }
     }
     
-    private func respond(_ message: ESMessagePtr, resolution: ESAuthResolution, reason: ResponseReason?, timeoutItem: DispatchWorkItem? = nil) {
+    private func respond(_ message: ESMessagePtr, resolution: ESAuthResolution, reason: ResponseReason, timeoutItem: DispatchWorkItem? = nil) {
         timeoutItem?.cancel()
         
         let status = _client.esResolve(message.unsafeRawMessage, flags: resolution.result.rawValue, cache: resolution.cache)
         
-        if let reason = reason {
-            let responseInfo = ResponseInfo(reason: reason, resolution: resolution, status: status)
-            postAuthMessage.notify((message, responseInfo))
-        }
-    }
-    
-    private func applySideEffects(_ message: UnsafePointer<es_message_t>) {
-        switch message.pointee.event_type {
-        case ES_EVENT_TYPE_NOTIFY_EXIT:
-            let token = message.pointee.process.pointee.audit_token
-            _processMutes.unmute(token)
-            _queue.async { self._cachedProcesses.removeValue(forKey: token) }
-        default:
-            break
-        }
-    }
-    
-    private func findProcess(for message: ESMessagePtr) -> ESProcess {
-        let token = message.process.pointee.audit_token
-        if let found = _cachedProcesses[token] {
-            return found
-        } else {
-            let parsed = ESConverter(version: message.version).esProcess(message.process)
-            let type = message.event_type
-            let cache = !(
-                type == ES_EVENT_TYPE_AUTH_EXEC ||
-                type == ES_EVENT_TYPE_NOTIFY_EXEC ||
-                type == ES_EVENT_TYPE_NOTIFY_EXIT
-            )
-            if cache && !parsed.isXpcProxy {
-                _cachedProcesses[token] = parsed
-            }
-            return parsed
-        }
+        let responseInfo = ResponseInfo(reason: reason, resolution: resolution, status: status)
+        postAuthMessage.notify((message, responseInfo))
     }
     
     private func scheduleCancel(for message: ESMessagePtr, cancellation: @escaping () -> Void) -> DispatchWorkItem? {
@@ -256,11 +212,5 @@ public extension ESClient {
         public var reason: ResponseReason
         public var resolution: ESAuthResolution
         public var status: es_respond_result_t
-    }
-}
-
-private extension ESProcess {
-    var isXpcProxy: Bool {
-        executable.path == "/usr/libexec/xpcproxy"
     }
 }

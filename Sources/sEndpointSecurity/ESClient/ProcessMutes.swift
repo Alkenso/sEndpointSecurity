@@ -28,24 +28,26 @@ import SwiftConvenience
 class ProcessMutes {
     private let _esMute: (audit_token_t) -> es_return_t
     private let _esUnmute: (audit_token_t) -> es_return_t
+    private let _checkProcessAlive: (pid_t) -> Bool
     
-    private let _queue = DispatchQueue(label: "ProcessMute.queue")
     private var _muteRules: Set<ESMuteProcess> = []
     
     
     init(
         esMute: @escaping (audit_token_t) -> es_return_t,
-        esUnmute: @escaping (audit_token_t) -> es_return_t
+        esUnmute: @escaping (audit_token_t) -> es_return_t,
+        checkProcessAlive: @escaping (pid_t) -> Bool
     ) {
         _esMute = esMute
         _esUnmute = esUnmute
+        _checkProcessAlive = checkProcessAlive
     }
     
     func mute(_ options: ESMuteProcess) -> es_return_t {
         if case let .token(token) = options {
             return _esMute(token)
         } else {
-            _queue.async { self._muteRules.insert(options) }
+            _muteRules.insert(options)
             return ES_RETURN_SUCCESS
         }
     }
@@ -54,19 +56,35 @@ class ProcessMutes {
         if case let .token(token) = options {
             return _esUnmute(token)
         } else {
-            _queue.async { self._muteRules.remove(options) }
+            _muteRules.remove(options)
             return ES_RETURN_SUCCESS
         }
     }
     
-    func unmute(_ process: audit_token_t) {
-        _queue.async { self._muteRules.remove(.pid(process.pid)) }
+    func isMuted(_ process: ESProcess) -> Bool {
+        _muteRules.contains { $0.matches(process: process) }
     }
     
-    func isMuted(_ process: ESProcess) -> Bool {
-        _queue.sync {
-            guard !_muteRules.isEmpty else { return false }
-            return _muteRules.contains { $0.matches(process: process) }
+    func scheduleCleanup(on queue: DispatchQueue, interval: TimeInterval) {
+        queue.asyncAfter(deadline: .now() + interval) { [weak self] in
+            guard let self = self else { return }
+            let rules = self._muteRules
+            DispatchQueue.global().async {
+                let rulesToRemove = rules.filter {
+                    switch $0 {
+                    case .token(let token):
+                        return self._checkProcessAlive(token.pid)
+                    case .pid(let pid):
+                        return self._checkProcessAlive(pid)
+                    case .euid, .name, .pathPrefix, .pathLiteral, .teamIdentifier, .signingID:
+                        return true
+                    }
+                }
+                queue.async {
+                    self._muteRules.subtract(rulesToRemove)
+                    self.scheduleCleanup(on: queue, interval: interval)
+                }
+            }
         }
     }
 }
@@ -75,7 +93,8 @@ extension ProcessMutes {
     convenience init(esClient: OpaquePointer) {
         self.init(
             esMute: { withUnsafePointer(to: $0) { es_mute_process(esClient, $0) } },
-            esUnmute: { withUnsafePointer(to: $0) { es_unmute_process(esClient, $0) } }
+            esUnmute: { withUnsafePointer(to: $0) { es_unmute_process(esClient, $0) } },
+            checkProcessAlive: { getpgid($0) >= 0 }
         )
     }
 }
