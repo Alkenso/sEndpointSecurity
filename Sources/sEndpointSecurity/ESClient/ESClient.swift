@@ -32,13 +32,13 @@ public class ESClient {
     /// Perfonamce-sensitive handler, called **synchronously** for each message.
     /// Do as minimum work as possible.
     /// To filter processes, use mute/unmute process methods.
-    /// Provided ESProcess is cached and can be used to avoid parsing of whole message.
-    public var messageFilter = TransformerOneToOne<(ESMessagePtr, ESProcess), Bool> { $0.reduce(true) { $0 && $1 } }
+    /// Provided ESProcess can be used to avoid parsing of whole message.
+    public var messageFilterHandler: ((ESMessagePtr, ESProcess) -> Bool)?
     
-    public var authMessage = TransformerOneToOne<ESMessagePtr, ESAuthResolution>(combine: ESAuthResolution.combine)
-    public var postAuthMessage = Notifier<(msg: ESMessagePtr, info: ResponseInfo)>()
+    public var authMessageHandler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void) -> Void)?
+    public var postAuthMessageHandler: ((ESMessagePtr, ResponseInfo) -> Void)?
     
-    public var notifyMessage = Notifier<ESMessagePtr>()
+    public var notifyMessageHandler: ((ESMessagePtr) -> Void)?
     
     
     public convenience init?(status: inout es_new_client_result_t?) {
@@ -126,7 +126,7 @@ public class ESClient {
     
     private func shoudMuteMessage(_ message: ESMessagePtr) -> Bool {
         let process =  ESConverter(version: message.version).esProcess(message.process)
-        guard messageFilter.sync((message, process)) != false else { return false }
+        guard messageFilterHandler?(message, process) != false else { return false }
         return _processMutes.isMuted(process)
     }
     
@@ -142,7 +142,7 @@ public class ESClient {
         
         switch message.action_type {
         case ES_ACTION_TYPE_AUTH:
-            guard !isMuted else {
+            guard let authMessageHandler = authMessageHandler, !isMuted else {
                 respond(message, resolution: .allowOnce, reason: .muted)
                 return
             }
@@ -151,12 +151,12 @@ public class ESClient {
                 self.respond(message, resolution: .allowOnce, reason: .timeout)
             }
             
-            authMessage.async(message) {
+            authMessageHandler(message) {
                 self.respond(message, resolution: $0, reason: .normal, timeoutItem: item)
             }
         case ES_ACTION_TYPE_NOTIFY:
             guard !isMuted else { return }
-            notifyMessage.notify(message)
+            notifyMessageHandler?(message)
         default:
             log("Unknown es_action type = \(message.action_type)")
             break
@@ -169,7 +169,7 @@ public class ESClient {
         let status = _client.esResolve(message.unsafeRawMessage, flags: resolution.result.rawValue, cache: resolution.cache)
         
         let responseInfo = ResponseInfo(reason: reason, resolution: resolution, status: status)
-        postAuthMessage.notify((message, responseInfo))
+        postAuthMessageHandler?(message, responseInfo)
     }
     
     private func scheduleCancel(for message: ESMessagePtr, cancellation: @escaping () -> Void) -> DispatchWorkItem? {
