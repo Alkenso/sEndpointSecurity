@@ -38,17 +38,14 @@ guard let client = ESClient(status: &status) else {
 }
 
 //  Register message handlers
-var cancellables: [AnyCancellable] = []
-client.authMessage.register { message, callback in
+client.authMessageHandler = { message, callback in
     print("Auth message: \(try! message.converted())")
     callback(.allowOnce)
 }
-.store(in: &cancellables)
 
-client.notifyMessage.register { message in
+client.notifyMessageHandler = { message in
     print("Notify message: \(try! message.converted())")
 }
-.store(in: &cancellables)
 
 //  Start receiving messages
 guard client.subscribe([ES_EVENT_TYPE_AUTH_EXEC, ES_EVENT_TYPE_NOTIFY_EXIT]) else {
@@ -57,8 +54,7 @@ guard client.subscribe([ES_EVENT_TYPE_AUTH_EXEC, ES_EVENT_TYPE_NOTIFY_EXIT]) els
 }
 
 
-withExtendedLifetime(cancellables) { RunLoop.main.run() }
-withExtendedLifetime(client) {}
+withExtendedLifetime(client) { RunLoop.main.run() }
 ```
 
 ## ES over XPC
@@ -77,17 +73,14 @@ guard status == ES_NEW_CLIENT_RESULT_SUCCESS else {
 }
 
 //  Register message handlers
-var cancellables: [AnyCancellable] = []
-client.authMessage.register { message, callback in
+client.authMessageHandler = { message, callback in
     print("Auth message: \(try! message.converted())")
     callback(.allowOnce)
 }
-.store(in: &cancellables)
 
-client.notifyMessage.register { message in
+client.notifyMessageHandler = { message in
     print("Notify message: \(try! message.converted())")
 }
-.store(in: &cancellables)
 
 //  Start receiving messages
 client.subscribe([ES_EVENT_TYPE_AUTH_EXEC, ES_EVENT_TYPE_NOTIFY_EXIT]) { result in
@@ -99,7 +92,6 @@ client.subscribe([ES_EVENT_TYPE_AUTH_EXEC, ES_EVENT_TYPE_NOTIFY_EXIT]) { result 
 }
 
 
-withExtendedLifetime(cancellables) { RunLoop.main.run() }
 withExtendedLifetime(client) {}
 ```
 
