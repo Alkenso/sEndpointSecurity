@@ -66,11 +66,6 @@ import sEndpointSecurity
 
 //  Create ESXPCClient
 let client = ESXPCClient(NSXPCConnection(serviceName: "com.alkenso.ESXPC"))
-let status = try! client.activate()
-guard status == ES_NEW_CLIENT_RESULT_SUCCESS else {
-    print("Failed to activate ESXPCClient. Status = \(status)")
-    exit(1)
-}
 
 //  Register message handlers
 client.authMessageHandler = { message, callback in
@@ -80,6 +75,12 @@ client.authMessageHandler = { message, callback in
 
 client.notifyMessageHandler = { message in
     print("Notify message: \(try! message.converted())")
+}
+
+let status = try! client.activate()
+guard status == ES_NEW_CLIENT_RESULT_SUCCESS else {
+    print("Failed to activate ESXPCClient. Status = \(status)")
+    exit(1)
 }
 
 //  Start receiving messages

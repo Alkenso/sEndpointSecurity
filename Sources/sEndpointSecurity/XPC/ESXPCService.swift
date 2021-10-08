@@ -221,52 +221,54 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
 
     
     private func handleAuthMessage(_ message: ESMessagePtr, completion: @escaping (ESAuthResolution) -> Void) {
-        _queue.async { self.processAuthMessage(message, completion: completion) }
-    }
-    
-    private func processAuthMessage(_ message: ESMessagePtr, completion: @escaping (ESAuthResolution) -> Void) {
-        guard let remoteObject = _delegate as? NSXPCProxyCreating else {
-            completion(.allowOnce)
-            let error = CommonError.cast(_delegate, to: NSXPCProxyCreating.self)
-            log("handleAuthMessage failed. Error: \(error)")
-            return
-        }
-        
-        let proxy = remoteObject.remoteObjectProxyWithErrorHandler {
-            log("handleAuthMessage failed. Error: \($0)")
-            completion(.allowOnce)
-        }
-        
-        guard let delegateProxy = proxy as? ESClientXPCDelegateProtocol else {
-            let error = CommonError.cast(proxy, to: ESClientXPCDelegateProtocol.self)
-            log("handleAuthMessage failed. Error: \(error)")
-            
-            completion(.allowOnce)
-            return
-        }
-        
-        guard let xpcMessage = encodeMessage(message) else {
-            completion(.allowOnce)
-            return
-        }
-        delegateProxy.handleAuth(xpcMessage) {
-            completion(ESAuthResolution(result: .flags($0), cache: $1))
-        }
+        processMessage(
+            message,
+            errorHandler: {
+                log("handleAuthMessage failed. Error: \($0)")
+                completion(.allowOnce)
+            },
+            actionHandler: {
+                $0.handleAuth($1) {
+                    completion(ESAuthResolution(result: .flags($0), cache: $1))
+                }
+            }
+        )
     }
     
     private func handleNotifyMessage(_ message: ESMessagePtr) {
-        _queue.async {
-            guard let xpcMessage = self.encodeMessage(message) else { return }
-            self._delegate.handleNotify(xpcMessage)
-        }
+        processMessage(
+            message,
+            errorHandler: { log("handleNotifyMessage failed. Error: \($0)") },
+            actionHandler: { $0.handleNotify($1) }
+        )
     }
-
-    private func encodeMessage(_ message: ESMessagePtr) -> ESMessagePtrXPC? {
-        do {
-            return try message.serialized()
-        } catch {
-            log("encodeMessage failed. Error: \(error)")
-            return nil
+    
+    private func processMessage(
+        _ message: ESMessagePtr,
+        errorHandler: @escaping (Error) -> Void,
+        actionHandler: @escaping (ESClientXPCDelegateProtocol, ESMessagePtrXPC) -> Void
+    ) {
+        _queue.async {
+            guard let remoteObject = self._delegate as? NSXPCProxyCreating else {
+                let error = CommonError.cast(self._delegate, to: NSXPCProxyCreating.self)
+                errorHandler(error)
+                return
+            }
+            
+            let proxy = remoteObject.remoteObjectProxyWithErrorHandler(errorHandler)
+            
+            guard let delegateProxy = proxy as? ESClientXPCDelegateProtocol else {
+                let error = CommonError.cast(proxy, to: ESClientXPCDelegateProtocol.self)
+                errorHandler(error)
+                return
+            }
+            
+            do {
+                let xpcMessage = try message.serialized()
+                actionHandler(delegateProxy, xpcMessage)
+            } catch {
+                errorHandler(error)
+            }
         }
     }
 

@@ -182,17 +182,23 @@ private class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
     var customMessageHandler: ((ESXPCCustomMessage) -> Void)?
 
     var errorLogHandler: ((Error) -> Void)?
-
+    
+    private static let fallback = ESAuthResolution.allowOnce
 
     func handleAuth(_ message: ESMessagePtrXPC, reply: @escaping (UInt32, Bool) -> Void) {
         do {
+            guard let authMessageHandler = authMessageHandler else {
+                reply(Self.fallback.result.rawValue, Self.fallback.cache)
+                log("Auth message came but no authMessageHandler installed")
+                return
+            }
+            
             let decoded = try ESMessagePtr(data: message)
-            try authMessageHandler.get()(decoded) {
+            authMessageHandler(decoded) {
                 reply($0.result.rawValue, $0.cache)
             }
         } catch {
-            let resolution = ESAuthResolution.allowOnce
-            reply(resolution.result.rawValue, resolution.cache)
+            reply(Self.fallback.result.rawValue, Self.fallback.cache)
             log("Failed to decode ESMessagePtr from auth event data. Error: \(error)")
         }
 
@@ -200,8 +206,13 @@ private class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
 
     func handleNotify(_ message: ESMessagePtrXPC) {
         do {
+            guard let notifyMessageHandler = notifyMessageHandler else {
+                log("Notify message came but no notifyMessageHandler installed")
+                return
+            }
+            
             let decoded = try ESMessagePtr(data: message)
-            notifyMessageHandler?(decoded)
+            notifyMessageHandler(decoded)
         } catch {
             log("Failed to decode ESMessagePtr from notify event data. Error: \(error)")
         }
