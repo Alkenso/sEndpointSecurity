@@ -41,7 +41,7 @@ public class ESClient {
     public var notifyMessageHandler: ((ESMessagePtr) -> Void)?
     
     
-    public convenience init?(status: inout es_new_client_result_t?) {
+    public convenience init?(status: inout es_new_client_result_t) {
         do {
             try self.init()
         } catch {
