@@ -126,7 +126,7 @@ public class ESClient {
     
     private func shoudMuteMessage(_ message: ESMessagePtr) -> Bool {
         let process =  ESConverter(version: message.version).esProcess(message.process)
-        guard messageFilterHandler?(message, process) != false else { return false }
+        guard messageFilterHandler?(message, process) != false else { return true }
         return _processMutes.isMuted(process)
     }
     
