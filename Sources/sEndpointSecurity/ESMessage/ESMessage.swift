@@ -34,6 +34,7 @@ public struct ESMessage: Equatable {
     public var seqNum: UInt64? /* field available only if message version >= 2 */
     public var action: Action
     public var event: ESEvent
+    public var eventType: es_event_type_t
     public var thread: ESThread? /* field available only if message version >= 4 */
     public var globalSeqNum: UInt64? /* field available only if message version >= 4 */
     

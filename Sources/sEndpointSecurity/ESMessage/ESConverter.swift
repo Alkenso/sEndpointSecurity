@@ -46,6 +46,7 @@ public extension ESConverter {
             seqNum: version >= 2 ? es.seq_num : nil, /* field available only if message version >= 2 */
             action: converter.esAction(es.action_type, es.action),
             event: converter.esEvent(es.event_type, es.event),
+            eventType: es.event_type,
             thread: version >= 4 ? es.thread.map(\.pointee).flatMap(converter.esThread) : nil, /* field available only if message version >= 4 */
             globalSeqNum: version >= 4 ? es.global_seq_num : nil /* field available only if message version >= 4 */
         )

@@ -299,6 +299,7 @@ class ESMessageSerializationTests: XCTestCase {
         XCTAssertEqual(converted.seqNum, rawInitial.pointee.seq_num)
         XCTAssertEqual(converted.action, try converter.esAction(rawInitial.pointee.action_type, rawInitial.pointee.action))
         XCTAssertEqual(converted.event, try converter.esEvent(rawInitial.pointee.event_type, rawInitial.pointee.event))
+        XCTAssertEqual(converted.eventType, rawInitial.pointee.event_type)
         XCTAssertEqual(converted.thread, rawInitial.pointee.thread.map(\.pointee).flatMap(converter.esThread))
         XCTAssertEqual(converted.globalSeqNum, rawInitial.pointee.global_seq_num)
     }
