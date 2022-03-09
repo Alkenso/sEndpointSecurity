@@ -340,6 +340,20 @@ public extension ESConverter {
             return .getTaskRead(esEvent(get_task_read: event.get_task_read))
         case ES_EVENT_TYPE_NOTIFY_GET_TASK_INSPECT:
             return .getTaskInspect(esEvent(get_task_inspect: event.get_task_inspect))
+        case ES_EVENT_TYPE_NOTIFY_SETUID:
+            return .setuid(esEvent(setuid: event.setuid))
+        case ES_EVENT_TYPE_NOTIFY_SETGID:
+            return .setuid(esEvent(setgid: event.setgid))
+        case ES_EVENT_TYPE_NOTIFY_SETEUID:
+            return .setuid(esEvent(seteuid: event.seteuid))
+        case ES_EVENT_TYPE_NOTIFY_SETEGID:
+            return .setuid(esEvent(setegid: event.setegid))
+        case ES_EVENT_TYPE_NOTIFY_SETREUID:
+            return .setreuid(esEvent(setreuid: event.setreuid))
+        case ES_EVENT_TYPE_NOTIFY_SETREGID:
+            return .setreuid(esEvent(setregid: event.setregid))
+        case ES_EVENT_TYPE_AUTH_COPYFILE, ES_EVENT_TYPE_NOTIFY_COPYFILE:
+            return .copyfile(esEvent(copyfile: event.copyfile))
         default:
             throw CommonError.invalidArgument(arg: "es_event_type_t", invalidValue: type)
         }
@@ -359,6 +373,10 @@ public extension ESConverter {
     
     func esEvent(clone es: es_event_clone_t) -> ESEvent.Clone {
         .init(source: esFile(es.source), targetDir: esFile(es.target_dir), targetName: esString(es.target_name))
+    }
+    
+    func esEvent(copyfile es: es_event_copyfile_t) -> ESEvent.CopyFile{
+        .init(source: esFile(es.source), targetFile: es.target_file.flatMap(esFile), targetDir: esFile(es.target_dir), targetName: esString(es.target_name), mode: es.mode, flags: es.flags)
     }
     
     func esEvent(close es: es_event_close_t) -> ESEvent.Close {
@@ -566,6 +584,30 @@ public extension ESConverter {
     
     func esEvent(setowner es: es_event_setowner_t) -> ESEvent.SetOwner {
         .init(uid: es.uid, gid: es.gid, target: esFile(es.target))
+    }
+    
+    func esEvent(setuid es: es_event_setuid_t) -> ESEvent.SetUID {
+        .init(uid: es.uid)
+    }
+    
+    func esEvent(setgid es: es_event_setgid_t) -> ESEvent.SetUID {
+        .init(uid: es.gid)
+    }
+    
+    func esEvent(seteuid es: es_event_seteuid_t) -> ESEvent.SetUID {
+        .init(uid: es.euid)
+    }
+    
+    func esEvent(setegid es: es_event_setegid_t) -> ESEvent.SetUID {
+        .init(uid: es.egid)
+    }
+    
+    func esEvent(setreuid es: es_event_setreuid_t) -> ESEvent.SetREUID {
+        .init(ruid: es.ruid, euid: es.euid)
+    }
+    
+    func esEvent(setregid es: es_event_setregid_t) -> ESEvent.SetREUID {
+        .init(ruid: es.rgid, euid: es.egid)
     }
     
     func esEvent(signal es: es_event_signal_t) -> ESEvent.Signal {

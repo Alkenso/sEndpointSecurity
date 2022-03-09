@@ -54,7 +54,7 @@ class ESMessageSerializationTests: XCTestCase {
         testESString1 = .init(resource: str1, converted: converter.esString(str1.unsafeValue))
         
         let str2 = rawESString("test another string")
-        testESString1 = .init(resource: str2, converted: converter.esString(str2.unsafeValue))
+        testESString2 = .init(resource: str2, converted: converter.esString(str2.unsafeValue))
         
         let data = rawESToken(Data(pod: UInt64.random(in: 0..<UInt64.max)))
         testESToken = .init(resource: data, converted: converter.esToken(data.unsafeValue))
@@ -396,6 +396,46 @@ extension ESMessageSerializationTests {
                         source: testESFile1.converted,
                         targetDir: testESFile2.converted,
                         targetName: testESString1.converted
+                    )
+                )
+            )
+        }
+    }
+    
+    func test_esEvent_copyfile() throws {
+        var event = es_event_copyfile_t.bzeroed()
+        event.source = testESFile1.es
+        event.target_file = testESFile2.es
+        event.target_dir = testESFile1.es
+        event.target_name = testESString2.es
+        event.mode = 123
+        event.flags = 100500
+        
+        let initial = es_events_t(copyfile: event)
+        for eventType in [ES_EVENT_TYPE_AUTH_COPYFILE, ES_EVENT_TYPE_NOTIFY_COPYFILE] {
+            let restored = try encodeDecode(eventType, initial)
+            let converted = try converter.esEvent(eventType, restored)
+            
+            if case let .copyfile(convertedEvent) = converted {
+                XCTAssertEqual(convertedEvent.source, testESFile1.converted)
+                XCTAssertEqual(convertedEvent.targetFile, testESFile2.converted)
+                XCTAssertEqual(convertedEvent.targetDir, testESFile1.converted)
+                XCTAssertEqual(convertedEvent.targetName, testESString2.converted)
+                XCTAssertEqual(convertedEvent.mode, 123)
+                XCTAssertEqual(convertedEvent.flags, 100500)
+            } else {
+                XCTFail("Invalid event decoded")
+            }
+            XCTAssertEqual(
+                converted,
+                .copyfile(
+                    .init(
+                        source: testESFile1.converted,
+                        targetFile: testESFile2.converted,
+                        targetDir: testESFile1.converted,
+                        targetName: testESString2.converted,
+                        mode: 123,
+                        flags: 100500
                     )
                 )
             )
@@ -1424,6 +1464,74 @@ extension ESMessageSerializationTests {
                 )
             )
         }
+    }
+    
+    func test_esEvent_setuid() throws {
+        var event = es_event_setuid_t.bzeroed()
+        event.uid = 123
+        
+        let initial = es_events_t(setuid: event)
+        let restored = try encodeDecode(ES_EVENT_TYPE_NOTIFY_SETUID, initial)
+        let converted = try converter.esEvent(ES_EVENT_TYPE_NOTIFY_SETUID, restored)
+        
+        XCTAssertEqual(converted, .setuid(.init(uid: 123)))
+    }
+    
+    func test_esEvent_setgid() throws {
+        var event = es_event_setgid_t.bzeroed()
+        event.gid = 123
+        
+        let initial = es_events_t(setgid: event)
+        let restored = try encodeDecode(ES_EVENT_TYPE_NOTIFY_SETGID, initial)
+        let converted = try converter.esEvent(ES_EVENT_TYPE_NOTIFY_SETGID, restored)
+        
+        XCTAssertEqual(converted, .setuid(.init(uid: 123)))
+    }
+    
+    func test_esEvent_seteuid() throws {
+        var event = es_event_seteuid_t.bzeroed()
+        event.euid = 123
+        
+        let initial = es_events_t(seteuid: event)
+        let restored = try encodeDecode(ES_EVENT_TYPE_NOTIFY_SETEUID, initial)
+        let converted = try converter.esEvent(ES_EVENT_TYPE_NOTIFY_SETEUID, restored)
+        
+        XCTAssertEqual(converted, .setuid(.init(uid: 123)))
+    }
+    
+    func test_esEvent_setegid() throws {
+        var event = es_event_setegid_t.bzeroed()
+        event.egid = 123
+        
+        let initial = es_events_t(setegid: event)
+        let restored = try encodeDecode(ES_EVENT_TYPE_NOTIFY_SETEGID, initial)
+        let converted = try converter.esEvent(ES_EVENT_TYPE_NOTIFY_SETEGID, restored)
+        
+        XCTAssertEqual(converted, .setuid(.init(uid: 123)))
+    }
+    
+    func test_esEvent_setreuid() throws {
+        var event = es_event_setreuid_t.bzeroed()
+        event.ruid = 100
+        event.euid = 200
+        
+        let initial = es_events_t(setreuid: event)
+        let restored = try encodeDecode(ES_EVENT_TYPE_NOTIFY_SETREUID, initial)
+        let converted = try converter.esEvent(ES_EVENT_TYPE_NOTIFY_SETREUID, restored)
+        
+        XCTAssertEqual(converted, .setreuid(.init(ruid: 100, euid: 200)))
+    }
+    
+    func test_esEvent_setregid() throws {
+        var event = es_event_setregid_t.bzeroed()
+        event.rgid = 100
+        event.egid = 200
+        
+        let initial = es_events_t(setregid: event)
+        let restored = try encodeDecode(ES_EVENT_TYPE_NOTIFY_SETREGID, initial)
+        let converted = try converter.esEvent(ES_EVENT_TYPE_NOTIFY_SETREGID, restored)
+        
+        XCTAssertEqual(converted, .setreuid(.init(ruid: 100, euid: 200)))
     }
     
     func test_esEvent_settime() throws {

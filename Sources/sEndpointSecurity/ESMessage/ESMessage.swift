@@ -93,6 +93,7 @@ public enum ESEvent: Equatable {
     case chdir(Chdir)
     case chroot(Chroot)
     case clone(Clone)
+    case copyfile(CopyFile)
     case close(Close)
     case create(Create)
     case csInvalidated
@@ -138,6 +139,8 @@ public enum ESEvent: Equatable {
     case setflags(SetFlags)
     case setmode(SetMode)
     case setowner(SetOwner)
+    case setuid(SetUID)
+    case setreuid(SetREUID)
     case settime
     case signal(Signal)
     case stat(Stat)
@@ -169,6 +172,15 @@ public extension ESEvent {
         public var source: ESFile
         public var targetDir: ESFile
         public var targetName: String
+    }
+    
+    struct CopyFile: Equatable {
+        public var source: ESFile
+        public var targetFile: ESFile?
+        public var targetDir: ESFile
+        public var targetName: String
+        public var mode: mode_t
+        public var flags: Int32
     }
     
     struct Close: Equatable {
@@ -397,6 +409,15 @@ public extension ESEvent {
         public var uid: uid_t
         public var gid: gid_t
         public var target: ESFile
+    }
+    
+    struct SetUID: Equatable {
+        public var uid: uid_t
+    }
+    
+    struct SetREUID: Equatable {
+        public var ruid: uid_t
+        public var euid: uid_t
     }
     
     struct Signal: Equatable {

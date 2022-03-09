@@ -456,6 +456,20 @@ extension es_events_t {
             try get_task_read.encode(with: &writer)
         case ES_EVENT_TYPE_NOTIFY_GET_TASK_INSPECT:
             try get_task_inspect.encode(with: &writer)
+        case ES_EVENT_TYPE_NOTIFY_SETUID:
+            try setuid.encode(with: &writer)
+        case ES_EVENT_TYPE_NOTIFY_SETGID:
+            try setuid.encode(with: &writer)
+        case ES_EVENT_TYPE_NOTIFY_SETEUID:
+            try setuid.encode(with: &writer)
+        case ES_EVENT_TYPE_NOTIFY_SETEGID:
+            try setuid.encode(with: &writer)
+        case ES_EVENT_TYPE_NOTIFY_SETREUID:
+            try setreuid.encode(with: &writer)
+        case ES_EVENT_TYPE_NOTIFY_SETREGID:
+            try setreuid.encode(with: &writer)
+        case ES_EVENT_TYPE_AUTH_COPYFILE, ES_EVENT_TYPE_NOTIFY_COPYFILE:
+            try copyfile.encode(with: &writer)
         default:
             fatalError()
         }
@@ -669,6 +683,20 @@ extension es_events_t {
             try get_task_read.decode(from: &reader)
         case ES_EVENT_TYPE_NOTIFY_GET_TASK_INSPECT:
             try get_task_inspect.decode(from: &reader)
+        case ES_EVENT_TYPE_NOTIFY_SETUID:
+            try setuid.decode(from: &reader)
+        case ES_EVENT_TYPE_NOTIFY_SETGID:
+            try setuid.decode(from: &reader)
+        case ES_EVENT_TYPE_NOTIFY_SETEUID:
+            try setuid.decode(from: &reader)
+        case ES_EVENT_TYPE_NOTIFY_SETEGID:
+            try setuid.decode(from: &reader)
+        case ES_EVENT_TYPE_NOTIFY_SETREUID:
+            try setreuid.decode(from: &reader)
+        case ES_EVENT_TYPE_NOTIFY_SETREGID:
+            try setreuid.decode(from: &reader)
+        case ES_EVENT_TYPE_AUTH_COPYFILE, ES_EVENT_TYPE_NOTIFY_COPYFILE:
+            try copyfile.decode(from: &reader)
         default:
             fatalError()
         }
@@ -882,6 +910,20 @@ extension es_events_t {
             get_task_read.freeInternals()
         case ES_EVENT_TYPE_NOTIFY_GET_TASK_INSPECT:
             get_task_inspect.freeInternals()
+        case ES_EVENT_TYPE_NOTIFY_SETUID:
+            setuid.freeInternals()
+        case ES_EVENT_TYPE_NOTIFY_SETGID:
+            setuid.freeInternals()
+        case ES_EVENT_TYPE_NOTIFY_SETEUID:
+            setuid.freeInternals()
+        case ES_EVENT_TYPE_NOTIFY_SETEGID:
+            setuid.freeInternals()
+        case ES_EVENT_TYPE_NOTIFY_SETREUID:
+            setreuid.freeInternals()
+        case ES_EVENT_TYPE_NOTIFY_SETREGID:
+            setreuid.freeInternals()
+        case ES_EVENT_TYPE_AUTH_COPYFILE, ES_EVENT_TYPE_NOTIFY_COPYFILE:
+            copyfile.freeInternals()
         default:
             break
         }
@@ -1211,6 +1253,38 @@ extension es_event_clone_t: LocalConstructible {
     
     func freeInternals() {
         source.nullable?.freeAndDeallocate()
+        target_dir.nullable?.freeAndDeallocate()
+        target_name.freeInternals()
+    }
+}
+
+extension es_event_copyfile_t: LocalConstructible {
+    func encode(with writer: inout BinaryWriter) throws {
+        try source.pointee.encode(with: &writer)
+        try target_file.encode(with: &writer)
+        try target_dir.pointee.encode(with: &writer)
+        try target_name.encode(with: &writer)
+        try writer.append(mode)
+        try writer.append(flags)
+    }
+    
+    mutating func decode(from reader: inout BinaryReader) throws {
+        do {
+            source = try .allocate(from: &reader)
+            target_file = try .allocate(from: &reader)
+            target_dir = try .allocate(from: &reader)
+            try target_name.decode(from: &reader)
+            mode = try reader.read()
+            flags = try reader.read()
+        } catch {
+            freeInternals()
+            throw error
+        }
+    }
+    
+    func freeInternals() {
+        source.nullable?.freeAndDeallocate()
+        target_file?.nullable?.freeAndDeallocate()
         target_dir.nullable?.freeAndDeallocate()
         target_name.freeInternals()
     }
@@ -2082,6 +2156,82 @@ extension es_event_setmode_t: LocalConstructible {
     func freeInternals() {
         target.nullable?.freeAndDeallocate()
     }
+}
+
+extension es_event_setuid_t: LocalConstructible {
+    func encode(with writer: inout BinaryWriter) throws {
+        try writer.append(uid)
+    }
+    
+    mutating func decode(from reader: inout BinaryReader) throws {
+        uid = try reader.read()
+    }
+    
+    func freeInternals() {}
+}
+
+extension es_event_setgid_t: LocalConstructible {
+    func encode(with writer: inout BinaryWriter) throws {
+        try writer.append(gid)
+    }
+    
+    mutating func decode(from reader: inout BinaryReader) throws {
+        gid = try reader.read()
+    }
+    
+    func freeInternals() {}
+}
+
+extension es_event_seteuid_t: LocalConstructible {
+    func encode(with writer: inout BinaryWriter) throws {
+        try writer.append(euid)
+    }
+    
+    mutating func decode(from reader: inout BinaryReader) throws {
+        euid = try reader.read()
+    }
+    
+    func freeInternals() {}
+}
+
+extension es_event_setegid_t: LocalConstructible {
+    func encode(with writer: inout BinaryWriter) throws {
+        try writer.append(egid)
+    }
+    
+    mutating func decode(from reader: inout BinaryReader) throws {
+        egid = try reader.read()
+    }
+    
+    func freeInternals() {}
+}
+
+extension es_event_setreuid_t: LocalConstructible {
+    func encode(with writer: inout BinaryWriter) throws {
+        try writer.append(ruid)
+        try writer.append(euid)
+    }
+    
+    mutating func decode(from reader: inout BinaryReader) throws {
+        ruid = try reader.read()
+        euid = try reader.read()
+    }
+    
+    func freeInternals() {}
+}
+
+extension es_event_setregid_t: LocalConstructible {
+    func encode(with writer: inout BinaryWriter) throws {
+        try writer.append(rgid)
+        try writer.append(egid)
+    }
+    
+    mutating func decode(from reader: inout BinaryReader) throws {
+        rgid = try reader.read()
+        egid = try reader.read()
+    }
+    
+    func freeInternals() {}
 }
 
 extension es_event_setowner_t: LocalConstructible {

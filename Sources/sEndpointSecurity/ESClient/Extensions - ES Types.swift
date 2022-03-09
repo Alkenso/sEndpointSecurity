@@ -239,6 +239,22 @@ extension es_event_type_t: CustomDebugStringConvertible {
             return "ES_EVENT_TYPE_NOTIFY_GET_TASK_READ"
         case ES_EVENT_TYPE_NOTIFY_GET_TASK_INSPECT:
             return "ES_EVENT_TYPE_NOTIFY_GET_TASK_INSPECT"
+        case ES_EVENT_TYPE_NOTIFY_SETUID:
+            return "ES_EVENT_TYPE_NOTIFY_SETUID"
+        case ES_EVENT_TYPE_NOTIFY_SETGID:
+            return "ES_EVENT_TYPE_NOTIFY_SETGID"
+        case ES_EVENT_TYPE_NOTIFY_SETEUID:
+            return "ES_EVENT_TYPE_NOTIFY_SETEUID"
+        case ES_EVENT_TYPE_NOTIFY_SETEGID:
+            return "ES_EVENT_TYPE_NOTIFY_SETEGID"
+        case ES_EVENT_TYPE_NOTIFY_SETREUID:
+            return "ES_EVENT_TYPE_NOTIFY_SETREUID"
+        case ES_EVENT_TYPE_NOTIFY_SETREGID:
+            return "ES_EVENT_TYPE_NOTIFY_SETREGID"
+        case ES_EVENT_TYPE_AUTH_COPYFILE:
+            return "ES_EVENT_TYPE_AUTH_COPYFILE"
+        case ES_EVENT_TYPE_NOTIFY_COPYFILE:
+            return "ES_EVENT_TYPE_NOTIFY_COPYFILE"
         default:
             return "unknown es_event_type_t"
         }
