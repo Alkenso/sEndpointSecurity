@@ -35,9 +35,15 @@ public class ESClient {
     /// Provided ESProcess can be used to avoid parsing of whole message.
     public var messageFilterHandler: ((ESMessagePtr, ESProcess) -> Bool)?
     
+    /// Handler invoked each time AUTH message is coming from EndpointSecurity.
+    /// The message MUST be replied using the second parameter - reply block.
     public var authMessageHandler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void) -> Void)?
+    
+    /// Handler invoked for each AUTH message after it has been replied.
+    /// Userful for statistic and post-actions.
     public var postAuthMessageHandler: ((ESMessagePtr, ResponseInfo) -> Void)?
     
+    /// Handler invoked each time NOTIFY message is coming from EndpointSecurity.
     public var notifyMessageHandler: ((ESMessagePtr) -> Void)?
     
     
