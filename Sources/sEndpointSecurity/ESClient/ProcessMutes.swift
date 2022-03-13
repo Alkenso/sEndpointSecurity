@@ -66,7 +66,7 @@ class ProcessMutes {
     }
     
     func scheduleCleanup(on queue: DispatchQueue, interval: TimeInterval) {
-        queue.asyncAfter(deadline: .now() + interval) { [weak self] in
+        queue.asyncAfter(deadline: .now() + interval, flags: .barrier) { [weak self] in
             guard let self = self else { return }
             let rules = self._muteRules
             DispatchQueue.global().async {

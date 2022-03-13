@@ -46,6 +46,8 @@ public class ESClient {
     /// Handler invoked each time NOTIFY message is coming from EndpointSecurity.
     public var notifyMessageHandler: ((ESMessagePtr) -> Void)?
     
+    /// Queue where all events are processed. Default to serial user-interactive queue. May be concurrent
+    public var eventQueue = DispatchQueue(label: "ESClient.event.queue", qos: .userInteractive)
     
     public convenience init?(status: inout es_new_client_result_t) {
         do {
@@ -76,7 +78,7 @@ public class ESClient {
             throw ESClientCreateError(status: status)
         }
         
-        _processMutes.scheduleCleanup(on: _queue, interval: 10.0)
+        _processMutes.scheduleCleanup(on: eventQueue, interval: 10.0)
     }
     
     deinit {
@@ -103,11 +105,11 @@ public class ESClient {
     }
     
     public func muteProcess(_ mute: ESMuteProcess) -> Bool {
-        _queue.sync { _processMutes.mute(mute) == ES_RETURN_SUCCESS }
+        eventQueue.sync(flags: .barrier) { _processMutes.mute(mute) == ES_RETURN_SUCCESS }
     }
     
     public func unmuteProcess(_ mute: ESMuteProcess) -> Bool {
-        _queue.sync { _processMutes.unmute(mute) == ES_RETURN_SUCCESS }
+        eventQueue.sync(flags: .barrier) { _processMutes.unmute(mute) == ES_RETURN_SUCCESS }
     }
     
     public func mutePath(prefix: String) -> Bool {
@@ -124,7 +126,6 @@ public class ESClient {
     
     
     // MARK: Private
-    private let _queue = DispatchQueue(label: "ESClient.event.queue", qos: .userInteractive)
     private var _client: OpaquePointer!
     private let _timebaseInfo: mach_timebase_info?
     private lazy var _processMutes = ProcessMutes(esClient: _client)
@@ -138,7 +139,7 @@ public class ESClient {
     
     private func handleMessage(_ rawMessage: UnsafePointer<es_message_t>) {
         let message = ESMessagePtr(message: rawMessage)
-        _queue.async {
+        eventQueue.async {
             self.processMessage(message)
         }
     }
