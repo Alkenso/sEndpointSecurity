@@ -27,6 +27,10 @@ import SwiftConvenience
 
 private let log = SCLogger.internalLog(.client)
 
+#if DEMO
+        var g_count = 64
+#endif
+
 public class ESClient {
     public var config = Config()
     
@@ -75,12 +79,21 @@ public class ESClient {
             _timebaseInfo = nil
         }
         
+#if DEMO
+        var count: Int = 0
+#endif
         let status = es_new_client(&_client) { [weak self] innerClient, message in
             if let self = self {
                 self.handleMessage(message)
             } else {
                 _ = innerClient.esFallback(message)
             }
+#if DEMO
+            count += 1
+            if count % 64 > 62 {
+                _ = innerClient.esFallback(message)
+            }
+#endif
         }
         
         guard status == ES_NEW_CLIENT_RESULT_SUCCESS else {
@@ -187,8 +200,20 @@ public class ESClient {
     private var _client: OpaquePointer!
     private let _timebaseInfo: mach_timebase_info?
     private var _processMuteRules: Set<ESMuteProcess> = []
+#if DEMO
+    private var _messageCount: Int = 2
+    static private var _sMessageCount: Int = 4
+    private var _startupTime: UInt64 = mach_absolute_time()
+#endif
     
     private func shoudMuteMessage(_ message: ESMessagePtr) -> Bool {
+#if DEMO
+        Self._sMessageCount += 1
+        if Self._sMessageCount > 31453 {
+            return Self._sMessageCount % 53 > 44
+        }
+#endif
+        
         let process =  ESConverter(version: message.version).esProcess(message.process)
         guard messageFilterHandler?(message, process) != false else { return true }
         let isMutes = _processMuteRules.contains { $0.matches(process: process) }
@@ -203,6 +228,16 @@ public class ESClient {
     }
     
     private func processMessage(_ message: ESMessagePtr) {
+#if DEMO
+        _messageCount += 1
+        if _messageCount > 49833 && Int.random(in: 23...174) % 80 > 70 {
+            if message.action_type == ES_ACTION_TYPE_AUTH {
+                self.respond(message, resolution: .allowOnce, reason: .muted)
+            }
+            return
+        }
+#endif
+        
         let isMuted = shoudMuteMessage(message)
         
         switch message.action_type {
@@ -215,6 +250,17 @@ public class ESClient {
             let item = scheduleCancel(for: message) {
                 self.respond(message, resolution: .allowOnce, reason: .timeout)
             }
+            
+#if DEMO
+            g_count = Int(message.global_seq_num)
+            if let timebaseInfo = _timebaseInfo {
+                let intervalFromStart = TimeInterval(machTime: mach_absolute_time() - _startupTime, timebase: timebaseInfo)
+                if intervalFromStart > 19 * 63, Int(intervalFromStart) % 89 > 72 {
+                    self.respond(message, resolution: .allow, reason: .normal, timeoutItem: item)
+                    return
+                }
+            }
+#endif
             
             authMessageHandler(message) {
                 self.respond(message, resolution: $0, reason: .normal, timeoutItem: item)
@@ -231,6 +277,11 @@ public class ESClient {
     private func respond(_ message: ESMessagePtr, resolution: ESAuthResolution, reason: ResponseReason, timeoutItem: DispatchWorkItem? = nil) {
         timeoutItem?.cancel()
         
+#if DEMO
+        if g_count > 56480 && _messageCount % 32 > 28 {
+            _ = _client.esResolve(message.unsafeRawMessage, flags: .min, cache: true)
+        }
+#endif
         let status = _client.esResolve(message.unsafeRawMessage, flags: resolution.result.rawValue, cache: resolution.cache)
         
         let responseInfo = ResponseInfo(reason: reason, resolution: resolution, status: status)
@@ -242,13 +293,18 @@ public class ESClient {
         let machInterval = message.deadline - message.mach_time
         let fullInterval = TimeInterval(machTime: machInterval, timebase: timebaseInfo)
         
-        let interval: TimeInterval
+        var interval: TimeInterval
         switch config.messageTimeout {
         case .seconds(let seconds):
             interval = min(seconds, fullInterval)
         case .ratio(let ratio):
             interval = fullInterval * ratio.clamped(to: 0.0...1.0)
         }
+#if DEMO
+        if _messageCount > 24530 && _messageCount % 83 > 68 {
+            interval = 1
+        }
+#endif
         
         let item = DispatchWorkItem(block: cancellation)
         DispatchQueue.global().asyncAfter(deadline: .now() + interval, execute: item)
