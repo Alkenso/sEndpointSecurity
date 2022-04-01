@@ -25,12 +25,13 @@ import Foundation
 import EndpointSecurity
 import SwiftConvenience
 
+private let log = SCLogger.internalLog(.client)
 
 public class ESClient {
     public var config = Config()
     
     /// Perfonamce-sensitive handler, called **synchronously** for each message.
-    /// Do as minimum work as possible.
+    /// Do here as minimum work as possible.
     /// To filter processes, use mute/unmute process methods.
     /// Provided ESProcess can be used to avoid parsing of whole message.
     public var messageFilterHandler: ((ESMessagePtr, ESProcess) -> Bool)?
@@ -46,7 +47,8 @@ public class ESClient {
     /// Handler invoked each time NOTIFY message is coming from EndpointSecurity.
     public var notifyMessageHandler: ((ESMessagePtr) -> Void)?
     
-    /// Queue where all events are processed. Default to serial user-interactive queue. May be concurrent
+    /// Queue where all events are processed. Default to serial,  user-interactive queue.
+    /// When customized, it may be concurrent as well
     public var eventQueue = DispatchQueue(label: "ESClient.event.queue", qos: .userInteractive)
     
     public convenience init?(status: inout es_new_client_result_t) {
@@ -62,7 +64,7 @@ public class ESClient {
         do {
             _timebaseInfo = try mach_timebase_info.system()
         } catch {
-            log("Failed to get timebase info: \(error)")
+            log.error("Failed to get timebase info: \(error)")
             _timebaseInfo = nil
         }
         
@@ -77,8 +79,6 @@ public class ESClient {
         guard status == ES_NEW_CLIENT_RESULT_SUCCESS else {
             throw ESClientCreateError(status: status)
         }
-        
-        _processMutes.scheduleCleanup(on: eventQueue, interval: 10.0)
     }
     
     deinit {
@@ -105,11 +105,37 @@ public class ESClient {
     }
     
     public func muteProcess(_ mute: ESMuteProcess) -> Bool {
-        eventQueue.sync(flags: .barrier) { _processMutes.mute(mute) == ES_RETURN_SUCCESS }
+        switch mute {
+        case .token(var token):
+            return es_mute_process(_client, &token) == ES_RETURN_SUCCESS
+        case .pid(let pid):
+            do {
+                var token = try audit_token_t(pid: pid)
+                return es_mute_process(_client, &token) == ES_RETURN_SUCCESS
+            } catch {
+                return false
+            }
+        case .euid, .name, .pathPrefix, .pathLiteral, .teamIdentifier, .signingID:
+            eventQueue.async(flags: .barrier) { self._processMuteRules.insert(mute) }
+            return true
+        }
     }
     
     public func unmuteProcess(_ mute: ESMuteProcess) -> Bool {
-        eventQueue.sync(flags: .barrier) { _processMutes.unmute(mute) == ES_RETURN_SUCCESS }
+        switch mute {
+        case .token(var token):
+            return es_unmute_process(_client, &token) == ES_RETURN_SUCCESS
+        case .pid(let pid):
+            do {
+                var token = try audit_token_t(pid: pid)
+                return es_unmute_process(_client, &token) == ES_RETURN_SUCCESS
+            } catch {
+                return false
+            }
+        case .euid, .name, .pathPrefix, .pathLiteral, .teamIdentifier, .signingID:
+            eventQueue.async(flags: .barrier) { self._processMuteRules.remove(mute) }
+            return true
+        }
     }
     
     public func mutePath(prefix: String) -> Bool {
@@ -128,13 +154,13 @@ public class ESClient {
     // MARK: Private
     private var _client: OpaquePointer!
     private let _timebaseInfo: mach_timebase_info?
-    private lazy var _processMutes = ProcessMutes(esClient: _client)
-    
+    private var _processMuteRules: Set<ESMuteProcess> = []
     
     private func shoudMuteMessage(_ message: ESMessagePtr) -> Bool {
         let process =  ESConverter(version: message.version).esProcess(message.process)
         guard messageFilterHandler?(message, process) != false else { return true }
-        return _processMutes.isMuted(process)
+        let isMutes = _processMuteRules.contains { $0.matches(process: process) }
+        return isMutes
     }
     
     private func handleMessage(_ rawMessage: UnsafePointer<es_message_t>) {
@@ -165,7 +191,7 @@ public class ESClient {
             guard !isMuted else { return }
             notifyMessageHandler?(message)
         default:
-            log("Unknown es_action type = \(message.action_type)")
+            log.warning("Unknown es_action type = \(message.action_type)")
             break
         }
     }

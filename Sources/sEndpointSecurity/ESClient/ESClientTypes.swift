@@ -64,7 +64,6 @@ public struct ESClientCreateError: Error {
     public var status: es_new_client_result_t
 }
 
-
 extension ESAuthResolution {
     static func combine(_ resolutions: [ESAuthResolution]) -> ESAuthResolution {
         guard let first = resolutions.first else { return .allowOnce }
@@ -74,5 +73,28 @@ extension ESAuthResolution {
         let cache = resolutions.map(\.cache).reduce(true) { $0 && $1 }
         
         return ESAuthResolution(result: .flags(flags), cache: cache)
+    }
+}
+
+extension ESMuteProcess {
+    func matches(process: ESProcess) -> Bool {
+        switch self {
+        case .token(let value):
+            return process.auditToken == value
+        case .pid(let value):
+            return process.auditToken.pid == value
+        case .euid(let value):
+            return process.auditToken.euid == value
+        case .name(let value):
+            return process.executable.path.hasSuffix("/" + value)
+        case .pathPrefix(let value):
+            return process.executable.path.hasPrefix(value)
+        case .pathLiteral(let value):
+            return process.executable.path == value
+        case .teamIdentifier(let value):
+            return process.teamID == value
+        case .signingID(let value):
+            return process.signingID == value
+        }
     }
 }

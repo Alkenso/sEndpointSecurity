@@ -42,6 +42,8 @@ class ESMessageSerializationTests: XCTestCase {
     }
     
     let converter = ESConverter(version: 4)
+    var testFileStat1: stat!
+    var testFileStat2: stat!
     var testESString1: TestEntity<es_string_token_t, String>!
     var testESString2: TestEntity<es_string_token_t, String>!
     var testESToken: TestEntity<es_token_t, Data>!
@@ -50,6 +52,9 @@ class ESMessageSerializationTests: XCTestCase {
     var testESProcess: TestEntityPtr<es_process_t, ESProcess>!
     
     override func setUpWithError() throws {
+        testFileStat1 = try FileManager.default.statItem(at: Bundle.main.bundleURL)
+        testFileStat2 = try FileManager.default.statItem(atPath: NSTemporaryDirectory())
+        
         let str1 = rawESString("test string 1")
         testESString1 = .init(resource: str1, converted: converter.esString(str1.unsafeValue))
         
@@ -59,16 +64,16 @@ class ESMessageSerializationTests: XCTestCase {
         let data = rawESToken(Data(pod: UInt64.random(in: 0..<UInt64.max)))
         testESToken = .init(resource: data, converted: converter.esToken(data.unsafeValue))
         
-        let file1 = rawESFile(Bundle.main.bundleURL.path, truncated: false, stat: try stat(url: Bundle.main.bundleURL))
+        let file1 = rawESFile(Bundle.main.bundleURL.path, truncated: false, stat: testFileStat1)
         testESFile1 = .init(resource: file1, converted: converter.esFile(file1.unsafeValue))
         
-        let file2 = rawESFile(NSTemporaryDirectory(), truncated: false, stat: try stat(path: NSTemporaryDirectory()))
+        let file2 = rawESFile(NSTemporaryDirectory(), truncated: false, stat: testFileStat2)
         testESFile2 = .init(resource: file2, converted: converter.esFile(file2.unsafeValue))
         
         let rawSigningID = rawESString("Signing ID")
         let rawTeamID = rawESString("Team ID")
-        let rawExecutableFile = rawESFile(Bundle.main.bundleURL.path, truncated: true, stat: try stat(url: Bundle.main.bundleURL))
-        let rawTTYFile = rawESFile("/path/to/tty/file", truncated: true, stat: try stat(url: Bundle.main.bundleURL))
+        let rawExecutableFile = rawESFile(Bundle.main.bundleURL.path, truncated: true, stat: testFileStat1)
+        let rawTTYFile = rawESFile("/path/to/tty/file", truncated: true, stat: testFileStat1)
         let rawProcess = UnsafeMutablePointer<es_process_t>.allocate(capacity: 1)
         try rawProcess.initialize(
             to: es_process_t(
@@ -121,23 +126,22 @@ class ESMessageSerializationTests: XCTestCase {
     func test_es_file() throws {
         let path = Bundle.main.bundleURL.path + "qq1"
         let pathTruncated = true
-        let stat = try stat(url: Bundle.main.bundleURL)
         
-        let rawInitial = rawESFile(path, truncated: pathTruncated, stat: stat)
+        let rawInitial = rawESFile(path, truncated: pathTruncated, stat: testFileStat1)
         let rawRestored = try encodeDecode(rawInitial.pointee)
         let file = converter.esFile(rawRestored.unsafeValue)
         
         XCTAssertTrue(file.path == path)
         XCTAssertEqual(file.path, path)
         XCTAssertEqual(file.truncated, true)
-        XCTAssertEqual(file.stat, stat)
+        XCTAssertEqual(file.stat, testFileStat1)
     }
     
     func test_es_process() throws {
         let rawSigningID = rawESString("Signing ID")
         let rawTeamID = rawESString("Team ID")
-        let rawExecutableFile = rawESFile(Bundle.main.bundleURL.path, truncated: true, stat: try stat(url: Bundle.main.bundleURL))
-        let rawTTYFile = rawESFile("/path/to/tty/file", truncated: true, stat: try stat(url: Bundle.main.bundleURL))
+        let rawExecutableFile = rawESFile(Bundle.main.bundleURL.path, truncated: true, stat: testFileStat1)
+        let rawTTYFile = rawESFile("/path/to/tty/file", truncated: true, stat: testFileStat1)
         defer { withExtendedLifetime([rawSigningID, rawTeamID, rawExecutableFile, rawTTYFile], {}) }
         
         let rawInitial = try es_process_t(
@@ -243,8 +247,8 @@ class ESMessageSerializationTests: XCTestCase {
     func test_es_message() throws {
         let rawSigningID = rawESString("Signing ID")
         let rawTeamID = rawESString("Team ID")
-        let rawExecutableFile = rawESFile(Bundle.main.bundleURL.path, truncated: true, stat: try stat(url: Bundle.main.bundleURL))
-        let rawTTYFile = rawESFile("/path/to/tty/file", truncated: true, stat: try stat(url: Bundle.main.bundleURL))
+        let rawExecutableFile = rawESFile(Bundle.main.bundleURL.path, truncated: true, stat: testFileStat1)
+        let rawTTYFile = rawESFile("/path/to/tty/file", truncated: true, stat: testFileStat1)
         defer { withExtendedLifetime([rawSigningID, rawTeamID, rawExecutableFile, rawTTYFile], {}) }
         
         let rawFile = try rawESFile("/path/to/executable/file", truncated: true, stat: .random())

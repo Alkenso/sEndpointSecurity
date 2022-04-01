@@ -25,6 +25,7 @@ import EndpointSecurity
 import Foundation
 import SwiftConvenience
 
+private let log = SCLogger.internalLog(.xpcCommunication)
 
 public class ESXPCService: NSObject {
     public var verifyConnectionHandler: ((audit_token_t) -> Bool)?
@@ -65,7 +66,7 @@ extension ESXPCService: NSXPCListenerDelegate {
         newConnection.remoteObjectInterface = .esClientDelegate
         guard let delegate = newConnection.remoteObjectProxy as? ESClientXPCDelegateProtocol else {
             let error = CommonError.cast(newConnection.remoteObjectProxy, to: ESClientXPCDelegateProtocol.self)
-            log("Failed to accept new connection. Error: \(error)")
+            log.fatal("Failed to accept new connection. Error: \(error)")
             return false
         }
 
@@ -224,7 +225,7 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
         processMessage(
             message,
             errorHandler: {
-                log("handleAuthMessage failed. Error: \($0)")
+                log.error("handleAuthMessage failed. Error: \($0)")
                 completion(.allowOnce)
             },
             actionHandler: {
@@ -238,7 +239,7 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
     private func handleNotifyMessage(_ message: ESMessagePtr) {
         processMessage(
             message,
-            errorHandler: { log("handleNotifyMessage failed. Error: \($0)") },
+            errorHandler: { log.error("handleNotifyMessage failed. Error: \($0)") },
             actionHandler: { $0.handleNotify($1) }
         )
     }
@@ -273,12 +274,7 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
     }
 
     private func decodeMute(_ mute: ESMuteProcessXPC) -> ESMuteProcess? {
-        do {
-            return try JSONDecoder().decode(ESMuteProcess.self, from: mute)
-        } catch {
-            log("decodeMute failed. Error: \(error)")
-            return nil
-        }
+        ESMuteProcess(json: mute, log: log)
     }
     
     private static func authenticate(

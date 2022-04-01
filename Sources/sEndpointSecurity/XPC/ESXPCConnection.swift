@@ -24,6 +24,7 @@ import EndpointSecurity
 import Foundation
 import SwiftConvenience
 
+private let log = SCLogger.internalLog(.xpcCommunication)
 
 class ESXPCConnection {
     typealias ConnectResult = Result<es_new_client_result_t, Error>
@@ -107,20 +108,20 @@ class ESXPCConnection {
         }
         
         guard let value = result.success, value.result == ES_NEW_CLIENT_RESULT_SUCCESS else {
-            log("Connect failed with result = \(result)")
+            log.error("Connect failed with result = \(result)")
             result.success?.connection.invalidate()
             scheduleReconnect()
             return
         }
         
         value.connection.invalidationHandler = { [weak self, weak connection = value.connection] in
-            log("ESXPC connection invalidated")
+            log.warning("ESXPC connection invalidated")
             
             connection?.invalidationHandler = nil
             self?.reconnect()
         }
         value.connection.interruptionHandler = { [weak connection = value.connection] in
-            log("ESXPC connection interrupted. Invalidating...")
+            log.warning("ESXPC connection interrupted. Invalidating...")
             
             connection?.interruptionHandler = nil
             connection?.invalidate()

@@ -24,6 +24,7 @@ import EndpointSecurity
 import Foundation
 import SwiftConvenience
 
+private let log = SCLogger.internalLog(.xpcClient)
 
 public class ESXPCClient {
     public var authMessageHandler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void) -> Void)?
@@ -147,7 +148,7 @@ public class ESXPCClient {
             return try JSONEncoder().encode(value)
         } catch {
             completion(.failure(error))
-            log("Failed to encode \(T.self): \(error)")
+            log.error("Failed to encode \(T.self): \(error)")
             return nil
         }
     }
@@ -189,7 +190,7 @@ private class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
         do {
             guard let authMessageHandler = authMessageHandler else {
                 reply(Self.fallback.result.rawValue, Self.fallback.cache)
-                log("Auth message came but no authMessageHandler installed")
+                log.warning("Auth message came but no authMessageHandler installed")
                 return
             }
             
@@ -199,7 +200,7 @@ private class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
             }
         } catch {
             reply(Self.fallback.result.rawValue, Self.fallback.cache)
-            log("Failed to decode ESMessagePtr from auth event data. Error: \(error)")
+            log.error("Failed to decode ESMessagePtr from auth event data. Error: \(error)")
         }
 
     }
@@ -207,14 +208,14 @@ private class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
     func handleNotify(_ message: ESMessagePtrXPC) {
         do {
             guard let notifyMessageHandler = notifyMessageHandler else {
-                log("Notify message came but no notifyMessageHandler installed")
+                log.warning("Notify message came but no notifyMessageHandler installed")
                 return
             }
             
             let decoded = try ESMessagePtr(data: message)
             notifyMessageHandler(decoded)
         } catch {
-            log("Failed to decode ESMessagePtr from notify event data. Error: \(error)")
+            log.error("Failed to decode ESMessagePtr from notify event data. Error: \(error)")
         }
     }
 

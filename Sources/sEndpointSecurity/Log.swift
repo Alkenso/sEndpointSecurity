@@ -21,10 +21,22 @@
 //  SOFTWARE.
 
 import Foundation
+import SwiftConvenience
 
+public enum sEndpointSecurityLogSubsystem: String, SCLogSubsystem {
+    case client = "ESClient"
+    case xpcClient = "ESXPCClient"
+    case xpcCommunication = "ESXPCCommunication"
+}
 
-public var esLog: ((Any) -> Void)?
+extension sEndpointSecurityLogSubsystem: CustomStringConvertible {
+    public var description: String {
+        "sEndpointSecurity.\(self)"
+    }
+}
 
-func log(_ message: @autoclosure () -> Any) {
-    esLog?(message())
+extension SCLog {
+    static func internalLog(_ subsystem: sEndpointSecurityLogSubsystem) -> SCLog {
+        SCLogger.default.withSubsystem(subsystem)
+    }
 }

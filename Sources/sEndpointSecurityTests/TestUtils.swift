@@ -25,7 +25,7 @@ import Foundation
 
 extension stat {
     static func random() throws -> stat {
-        try Bundle.main.bundleURL.stat()
+        try FileManager.default.statItem(at: Bundle.main.bundleURL)
     }
 }
 
