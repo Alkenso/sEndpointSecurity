@@ -18,7 +18,7 @@ let package = Package(
         .target(
             name: "sEndpointSecurity",
             dependencies: ["SwiftConvenience"],
-            linkerSettings: [LinkerSetting.linkedLibrary("EndpointSecurity")]
+            linkerSettings: [.linkedLibrary("EndpointSecurity")]
         ),
         .testTarget(
             name: "sEndpointSecurityTests",
