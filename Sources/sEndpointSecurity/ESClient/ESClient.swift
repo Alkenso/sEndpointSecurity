@@ -51,15 +51,22 @@ public class ESClient {
     /// When customized, it may be concurrent as well
     public var eventQueue = DispatchQueue(label: "ESClient.event.queue", qos: .userInteractive)
     
+    /// Initialise a new ESClient and connect to the ES subsystem. No-throw version
+    /// Subscribe to some set of events
+    /// - Parameters:
+    ///     - status: Out parameter indicating status on initialization result
     public convenience init?(status: inout es_new_client_result_t) {
         do {
             try self.init()
+            status = ES_NEW_CLIENT_RESULT_SUCCESS
         } catch {
             status = (error as? ESClientCreateError)?.status ?? ES_NEW_CLIENT_RESULT_ERR_INTERNAL
             return nil
         }
     }
     
+    /// Initialise a new ESClient and connect to the ES subsystem
+    /// - throws: ESClientCreateError in case of error
     public init() throws {
         do {
             _timebaseInfo = try mach_timebase_info.system()
@@ -88,22 +95,43 @@ public class ESClient {
         }
     }
     
+    /// Subscribe to some set of events
+    /// - Parameters:
+    ///     - events: Array of es_event_type_t to subscribe to
+    ///     - returns: Boolean indicating success or error
+    /// - Note: Subscribing to new event types does not remove previous subscriptions
     public func subscribe(_ events: [es_event_type_t]) -> Bool {
         _client.esSubscribe(events) == ES_RETURN_SUCCESS
     }
     
+    /// Unsubscribe from some set of events
+    /// - Parameters:
+    ///     - events: Array of es_event_type_t to unsubscribe from
+    ///     - returns: Boolean indicating success or error
+    /// - Note: Events not included in the given `events` array that were previously subscribed to
+    ///         will continue to be subscribed to
     public func unsubscribe(_ events: [es_event_type_t]) -> Bool {
         _client.esUnsubscribe(events) == ES_RETURN_SUCCESS
     }
     
+    /// Unsubscribe from all events
+    /// - Parameters:
+    ///     - returns: Boolean indicating success or error
     public func unsubscribeAll() -> Bool {
         es_unsubscribe_all(_client) == ES_RETURN_SUCCESS
     }
     
+    /// Clear all cached results for all clients.
+    /// - Parameters:
+    ///     - returns: es_clear_cache_result_t value indicating success or an error
     public func clearCache() -> es_clear_cache_result_t {
         es_clear_cache(_client)
     }
     
+    /// Suppress all events from the process described by the given `mute` rule
+    /// - Parameters:
+    ///     - mute: The rule to mute processes that match it
+    ///     - returns: Boolean indicating success or error
     public func muteProcess(_ mute: ESMuteProcess) -> Bool {
         switch mute {
         case .token(var token):
@@ -121,6 +149,10 @@ public class ESClient {
         }
     }
     
+    /// Unmute a process for all event types
+    /// - Parameters:
+    ///     - mute: The rule to unmute
+    ///     - returns: Boolean indicating success or error
     public func unmuteProcess(_ mute: ESMuteProcess) -> Bool {
         switch mute {
         case .token(var token):
