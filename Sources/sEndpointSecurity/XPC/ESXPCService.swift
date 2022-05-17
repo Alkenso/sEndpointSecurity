@@ -53,7 +53,7 @@ public class ESXPCService: NSObject {
 
 
     // MARK: Private
-    private let _sendCustomMessage = Notifier<(message: ESXPCCustomMessage, peer: UUID)>()
+    private let _sendCustomMessage = EventNotify<(message: ESXPCCustomMessage, peer: UUID)>()
     private let _createClient: () throws -> ESClient
     private let _listener: NSXPCListener
 }
@@ -213,7 +213,7 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
 
 
     // MARK: Private
-    private let _sendCustomMessage = Notifier<ESXPCCustomMessage>()
+    private let _sendCustomMessage = EventNotify<ESXPCCustomMessage>()
     private let _queue = DispatchQueue(label: "ESXPCServiceClient.queue")
     private let _createClient: () throws -> ESClient
     private let _delegate: ESClientXPCDelegateProtocol

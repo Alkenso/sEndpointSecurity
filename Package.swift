@@ -12,7 +12,7 @@ let package = Package(
         .library(name: "sEndpointSecurity", targets: ["sEndpointSecurity"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/Alkenso/SwiftConvenience.git", from: "0.0.9"),
+        .package(url: "https://github.com/Alkenso/SwiftConvenience.git", from: "0.0.15"),
     ],
     targets: [
         .target(
