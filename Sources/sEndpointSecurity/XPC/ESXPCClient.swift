@@ -115,18 +115,6 @@ public class ESXPCClient {
         proxy.unmuteProcess(data) { completion(.success($0)) }
     }
 
-    public func mutePath(prefix: String, completion: @escaping (Result<Bool, Error>) -> Void) {
-        remoteObjectProxy(completion)?.mutePath(prefix: prefix) { completion(.success($0)) }
-    }
-
-    public func mutePath(literal: String, completion: @escaping (Result<Bool, Error>) -> Void) {
-        remoteObjectProxy(completion)?.mutePath(literal: literal) { completion(.success($0)) }
-    }
-
-    public func unmuteAllPaths(completion: @escaping (Result<Bool, Error>) -> Void) {
-        remoteObjectProxy(completion)?.unmuteAllPaths { completion(.success($0)) }
-    }
-
     public func custom(_ custom: ESXPCCustomMessage, completion: @escaping (Error?) -> Void) {
         guard let proxy = _connection.remoteObjectProxy(completion) else { return }
         proxy.custom(id: custom.id, payload: custom.payload, isReply: custom.isReply) {

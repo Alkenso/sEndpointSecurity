@@ -184,24 +184,6 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
         }
     }
 
-    func mutePath(prefix: String, reply: @escaping (Bool) -> Void) {
-        DispatchQueue.global().async {
-            reply(self._client?.mutePath(prefix: prefix) ?? false)
-        }
-    }
-
-    func mutePath(literal: String, reply: @escaping (Bool) -> Void) {
-        DispatchQueue.global().async {
-            reply(self._client?.mutePath(literal: literal) ?? false)
-        }
-    }
-
-    func unmuteAllPaths(reply: @escaping (Bool) -> Void) {
-        DispatchQueue.global().async {
-            reply(self._client?.unmuteAllPaths() ?? false)
-        }
-    }
-
     func custom(id: UUID, payload: Data, isReply: Bool, reply: @escaping () -> Void) {
         DispatchQueue.global().async {
             self.receiveCustomMessageHandler?(

@@ -33,17 +33,16 @@ public class ESMessagePtr {
         case allocated
     }
     
-    public let unsafeRawMessage: UnsafePointer<es_message_t>
+    public let rawMessage: UnsafePointer<es_message_t>
     private let ownership: Ownership
-    
     
     /// Initializes with message, retaining it and releasing when deallocated.
     public init(message: UnsafePointer<es_message_t>) {
         if #available(macOS 11.0, *) {
             es_retain_message(message)
-            self.unsafeRawMessage = message
+            self.rawMessage = message
         } else {
-            self.unsafeRawMessage = UnsafePointer(es_copy_message(message)!)
+            self.rawMessage = UnsafePointer(es_copy_message(message)!)
         }
         ownership = .retained
     }
@@ -51,7 +50,7 @@ public class ESMessagePtr {
     /// Initializes with message without copying or retaining it.
     /// Use ONLY if you are sure that message outlives this instance.
     public init(unowned message: UnsafePointer<es_message_t>) {
-        self.unsafeRawMessage = message
+        self.rawMessage = message
         ownership = .unowned
     }
     
@@ -59,7 +58,7 @@ public class ESMessagePtr {
     /// Do NOT use instances of messages created by this init with es_xxx API.
     public init(data: Data) throws {
         var reader = BinaryReader(data: data)
-        unsafeRawMessage = UnsafePointer(try UnsafeMutablePointer<es_message_t>.allocate(from: &reader))
+        rawMessage = UnsafePointer(try UnsafeMutablePointer<es_message_t>.allocate(from: &reader))
         ownership = .allocated
     }
     
@@ -67,14 +66,14 @@ public class ESMessagePtr {
         switch ownership {
         case .retained:
             if #available(macOS 11.0, *) {
-                es_release_message(unsafeRawMessage)
+                es_release_message(rawMessage)
             } else {
-                es_free_message(UnsafeMutablePointer(mutating: unsafeRawMessage))
+                es_free_message(UnsafeMutablePointer(mutating: rawMessage))
             }
         case .unowned:
             break
         case .allocated:
-            UnsafeMutablePointer(mutating: unsafeRawMessage).freeAndDeallocate()
+            UnsafeMutablePointer(mutating: rawMessage).freeAndDeallocate()
         }
     }
     
@@ -86,27 +85,19 @@ public class ESMessagePtr {
             MemoryLayout<es_thread_t>.size
         let destination = DataBinaryWriterOutput(data: Data(capacity: estimatedSize))
         var writer = BinaryWriter(destination)
-        try withRawMessage { try $0.encode(with: &writer) }
+        try rawMessage.pointee.encode(with: &writer)
         
         return destination.data
     }
     
     /// Converts raw message into ESMessage.
     public func converted() throws -> ESMessage {
-        try withRawMessage(ESConverter.esMessage)
+        try ESConverter.esMessage(rawMessage.pointee)
     }
 }
 
-public extension ESMessagePtr {
-    func withRawMessagePtr<R>(_ body: (UnsafePointer<es_message_t>) throws -> R) rethrows -> R {
-        try body(unsafeRawMessage)
-    }
-    
-    func withRawMessage<R>(_ body: (es_message_t) throws -> R) rethrows -> R {
-        try withRawMessagePtr { try body($0.pointee) }
-    }
-    
-    subscript<Local>(dynamicMember keyPath: KeyPath<es_message_t, Local>) -> Local {
-        unsafeRawMessage.pointee[keyPath: keyPath]
+extension ESMessagePtr {
+    public subscript<Local>(dynamicMember keyPath: KeyPath<es_message_t, Local>) -> Local {
+        rawMessage.pointee[keyPath: keyPath]
     }
 }

@@ -25,7 +25,7 @@ import Foundation
 import SwiftConvenience
 
 
-public struct ESMessage: Equatable {
+public struct ESMessage: Equatable, Codable {
     public var version: UInt32
     public var time: timespec
     public var machTime: UInt64
@@ -38,7 +38,7 @@ public struct ESMessage: Equatable {
     public var thread: ESThread? /* field available only if message version >= 4 */
     public var globalSeqNum: UInt64? /* field available only if message version >= 4 */
     
-    public enum Action: Equatable {
+    public enum Action: Equatable, Codable {
         case auth
         case notify(ESAuthResult)
     }
@@ -58,7 +58,7 @@ public struct ESMessage: Equatable {
     }
 }
 
-public struct ESProcess: Equatable {
+public struct ESProcess: Equatable, Codable {
     public var auditToken: audit_token_t
     public var ppid: pid_t
     public var originalPpid: pid_t
@@ -96,7 +96,7 @@ public struct ESProcess: Equatable {
     }
 }
 
-public struct ESFile: Equatable {
+public struct ESFile: Equatable, Codable {
     public var path: String
     public var truncated: Bool
     public var stat: stat
@@ -108,7 +108,7 @@ public struct ESFile: Equatable {
     }
 }
 
-public struct ESThread: Equatable {
+public struct ESThread: Equatable, Codable {
     public var threadID: UInt64
     
     public init(threadID: UInt64) {
@@ -116,7 +116,7 @@ public struct ESThread: Equatable {
     }
 }
 
-public struct ESThreadState: Equatable {
+public struct ESThreadState: Equatable, Codable {
     public var flavor: Int32
     public var state: Data
     
@@ -137,7 +137,7 @@ public struct ESAuthResult: Equatable, Codable, RawRepresentable {
     }
 }
 
-public enum ESEvent: Equatable {
+public enum ESEvent: Equatable, Codable {
     case access(Access)
     case chdir(Chdir)
     case chroot(Chroot)
@@ -204,7 +204,7 @@ public enum ESEvent: Equatable {
 }
 
 public extension ESEvent {
-    struct Access: Equatable {
+    struct Access: Equatable, Codable {
         public var mode: Int32
         public var target: ESFile
         
@@ -214,7 +214,7 @@ public extension ESEvent {
         }
     }
     
-    struct Chdir: Equatable {
+    struct Chdir: Equatable, Codable {
         public var target: ESFile
         
         public init(target: ESFile) {
@@ -222,7 +222,7 @@ public extension ESEvent {
         }
     }
     
-    struct Chroot: Equatable {
+    struct Chroot: Equatable, Codable {
         public var target: ESFile
         
         public init(target: ESFile) {
@@ -230,7 +230,7 @@ public extension ESEvent {
         }
     }
     
-    struct Clone: Equatable {
+    struct Clone: Equatable, Codable {
         public var source: ESFile
         public var targetDir: ESFile
         public var targetName: String
@@ -242,7 +242,7 @@ public extension ESEvent {
         }
     }
     
-    struct CopyFile: Equatable {
+    struct CopyFile: Equatable, Codable {
         public var source: ESFile
         public var targetFile: ESFile?
         public var targetDir: ESFile
@@ -260,7 +260,7 @@ public extension ESEvent {
         }
     }
     
-    struct Close: Equatable {
+    struct Close: Equatable, Codable {
         public var modified: Bool
         public var target: ESFile
         
@@ -270,13 +270,15 @@ public extension ESEvent {
         }
     }
     
-    struct Create: Equatable {
+    struct Create: Equatable, Codable {
         public var destination: Destination
         
-        // currently not supported
-        // public var acl: acl_t? /* field available only if message version >= 2 */
+        /// - Note: field available only if message version >= 2
+        /// - Note: `acl` is present only in original message.
+        /// If structure is re-encoded, this field will be lost.
+        public var acl: acl_t?
         
-        public enum Destination: Equatable {
+        public enum Destination: Equatable, Codable {
             case existingFile(ESFile)
             case newPath(dir: ESFile, filename: String, mode: mode_t)
         }
@@ -284,9 +286,13 @@ public extension ESEvent {
         public init(destination: ESEvent.Create.Destination) {
             self.destination = destination
         }
+        
+        enum CodingKeys: String, CodingKey {
+            case destination
+        }
     }
     
-    struct DeleteExtAttr: Equatable {
+    struct DeleteExtAttr: Equatable, Codable {
         public var target: ESFile
         public var extattr: String
         
@@ -296,7 +302,7 @@ public extension ESEvent {
         }
     }
     
-    struct Dup: Equatable {
+    struct Dup: Equatable, Codable {
         public var target: ESFile
         
         public init(target: ESFile) {
@@ -304,7 +310,7 @@ public extension ESEvent {
         }
     }
     
-    struct ExchangeData: Equatable {
+    struct ExchangeData: Equatable, Codable {
         public var file1: ESFile
         public var file2: ESFile
         
@@ -314,7 +320,7 @@ public extension ESEvent {
         }
     }
     
-    struct Exec: Equatable {
+    struct Exec: Equatable, Codable {
         public var target: ESProcess
         public var script: ESFile? /* field available only if message version >= 2 */
         public var cwd: ESFile? /* field available only if message version >= 3 */
@@ -328,7 +334,7 @@ public extension ESEvent {
         }
     }
     
-    struct Exit: Equatable {
+    struct Exit: Equatable, Codable {
         public var status: Int32
         
         public init(status: Int32) {
@@ -336,7 +342,7 @@ public extension ESEvent {
         }
     }
     
-    struct FileProviderMaterialize: Equatable {
+    struct FileProviderMaterialize: Equatable, Codable {
         public var instigator: ESProcess
         public var source: ESFile
         public var target: ESFile
@@ -348,7 +354,7 @@ public extension ESEvent {
         }
     }
     
-    struct FileProviderUpdate: Equatable {
+    struct FileProviderUpdate: Equatable, Codable {
         public var source: ESFile
         public var targetPath: String
         
@@ -358,7 +364,7 @@ public extension ESEvent {
         }
     }
     
-    struct Fcntl: Equatable {
+    struct Fcntl: Equatable, Codable {
         public var target: ESFile
         public var cmd: Int32
         
@@ -368,7 +374,7 @@ public extension ESEvent {
         }
     }
     
-    struct Fork: Equatable {
+    struct Fork: Equatable, Codable {
         public var child: ESProcess
         
         public init(child: ESProcess) {
@@ -376,7 +382,7 @@ public extension ESEvent {
         }
     }
     
-    struct FsGetPath: Equatable {
+    struct FsGetPath: Equatable, Codable {
         public var target: ESFile
         
         public init(target: ESFile) {
@@ -384,7 +390,7 @@ public extension ESEvent {
         }
     }
     
-    struct GetTask: Equatable {
+    struct GetTask: Equatable, Codable {
         public var target: ESProcess
         
         public init(target: ESProcess) {
@@ -392,7 +398,7 @@ public extension ESEvent {
         }
     }
     
-    struct GetTaskRead: Equatable {
+    struct GetTaskRead: Equatable, Codable {
         public var target: ESProcess
         
         public init(target: ESProcess) {
@@ -400,7 +406,7 @@ public extension ESEvent {
         }
     }
     
-    struct GetTaskInspect: Equatable {
+    struct GetTaskInspect: Equatable, Codable {
         public var target: ESProcess
         
         public init(target: ESProcess) {
@@ -408,7 +414,7 @@ public extension ESEvent {
         }
     }
     
-    struct GetTaskName: Equatable {
+    struct GetTaskName: Equatable, Codable {
         public var target: ESProcess
         
         public init(target: ESProcess) {
@@ -416,7 +422,7 @@ public extension ESEvent {
         }
     }
     
-    struct GetAttrList: Equatable {
+    struct GetAttrList: Equatable, Codable {
         public var attrlist: attrlist
         public var target: ESFile
         
@@ -426,7 +432,7 @@ public extension ESEvent {
         }
     }
     
-    struct GetExtAttr: Equatable {
+    struct GetExtAttr: Equatable, Codable {
         public var target: ESFile
         public var extattr: String
         
@@ -436,7 +442,7 @@ public extension ESEvent {
         }
     }
     
-    struct IOKitOpen: Equatable {
+    struct IOKitOpen: Equatable, Codable {
         public var userClientType: UInt32
         public var userClientClass: String
         
@@ -446,7 +452,7 @@ public extension ESEvent {
         }
     }
     
-    struct KextLoad: Equatable {
+    struct KextLoad: Equatable, Codable {
         public var identifier: String
         
         public init(identifier: String) {
@@ -454,7 +460,7 @@ public extension ESEvent {
         }
     }
     
-    struct KextUnload: Equatable {
+    struct KextUnload: Equatable, Codable {
         public var identifier: String
         
         public init(identifier: String) {
@@ -462,7 +468,7 @@ public extension ESEvent {
         }
     }
     
-    struct Link: Equatable {
+    struct Link: Equatable, Codable {
         public var source: ESFile
         public var targetDir: ESFile
         public var targetFilename: String
@@ -474,7 +480,7 @@ public extension ESEvent {
         }
     }
     
-    struct ListExtAttr: Equatable {
+    struct ListExtAttr: Equatable, Codable {
         public var target: ESFile
         
         public init(target: ESFile) {
@@ -482,7 +488,7 @@ public extension ESEvent {
         }
     }
     
-    struct Lookup: Equatable {
+    struct Lookup: Equatable, Codable {
         public var sourceDir: ESFile
         public var relativeTarget: String
         
@@ -492,7 +498,7 @@ public extension ESEvent {
         }
     }
     
-    struct MMap: Equatable {
+    struct MMap: Equatable, Codable {
         public var protection: Int32
         public var maxProtection: Int32
         public var flags: Int32
@@ -508,7 +514,7 @@ public extension ESEvent {
         }
     }
     
-    struct Mount: Equatable {
+    struct Mount: Equatable, Codable {
         public var statfs: statfs
         
         public init(statfs: statfs) {
@@ -516,7 +522,7 @@ public extension ESEvent {
         }
     }
     
-    struct MProtect: Equatable {
+    struct MProtect: Equatable, Codable {
         public var protection: Int32
         public var address: user_addr_t
         public var size: user_size_t
@@ -528,7 +534,7 @@ public extension ESEvent {
         }
     }
     
-    struct Open: Equatable {
+    struct Open: Equatable, Codable {
         public var fflag: Int32
         public var file: ESFile
         
@@ -538,7 +544,7 @@ public extension ESEvent {
         }
     }
     
-    struct ProcCheck: Equatable {
+    struct ProcCheck: Equatable, Codable {
         public var target: ESProcess?
         public var type: es_proc_check_type_t
         public var flavor: Int32
@@ -550,7 +556,7 @@ public extension ESEvent {
         }
     }
     
-    struct ProcSuspendResume: Equatable {
+    struct ProcSuspendResume: Equatable, Codable {
         public var target: ESProcess?
         public var type: es_proc_suspend_resume_type_t
         
@@ -560,7 +566,7 @@ public extension ESEvent {
         }
     }
     
-    struct PtyClose: Equatable {
+    struct PtyClose: Equatable, Codable {
         public var dev: dev_t
         
         public init(dev: dev_t) {
@@ -568,7 +574,7 @@ public extension ESEvent {
         }
     }
     
-    struct PtyGrant: Equatable {
+    struct PtyGrant: Equatable, Codable {
         public var dev: dev_t
         
         public init(dev: dev_t) {
@@ -576,7 +582,7 @@ public extension ESEvent {
         }
     }
     
-    struct Readdir: Equatable {
+    struct Readdir: Equatable, Codable {
         public var target: ESFile
         
         public init(target: ESFile) {
@@ -584,7 +590,7 @@ public extension ESEvent {
         }
     }
     
-    struct Readlink: Equatable {
+    struct Readlink: Equatable, Codable {
         public var source: ESFile
         
         public init(source: ESFile) {
@@ -592,7 +598,7 @@ public extension ESEvent {
         }
     }
     
-    struct RemoteThreadCreate: Equatable {
+    struct RemoteThreadCreate: Equatable, Codable {
         public var target: ESProcess
         public var threadState: ESThreadState?
         
@@ -602,7 +608,7 @@ public extension ESEvent {
         }
     }
     
-    struct Remount: Equatable {
+    struct Remount: Equatable, Codable {
         public var statfs: statfs
         
         public init(statfs: statfs) {
@@ -610,11 +616,11 @@ public extension ESEvent {
         }
     }
     
-    struct Rename: Equatable {
+    struct Rename: Equatable, Codable {
         public var source: ESFile
         public var destination: Destination
         
-        public enum Destination: Equatable {
+        public enum Destination: Equatable, Codable {
             case existingFile(ESFile)
             case newPath(dir: ESFile, filename: String)
         }
@@ -626,7 +632,7 @@ public extension ESEvent {
         }
     }
     
-    struct SearchFS: Equatable {
+    struct SearchFS: Equatable, Codable {
         public var attrlist: attrlist
         public var target: ESFile
         
@@ -636,20 +642,26 @@ public extension ESEvent {
         }
     }
     
-    struct SetACL: Equatable {
+    struct SetACL: Equatable, Codable {
         public var target: ESFile
         public var setOrClear: es_set_or_clear_t
         
-        //  currently not supported
-        //  public var acl: acl_t
+        /// - Note: `acl` is present only in original message.
+        /// If structure is re-encoded, this field will be lost.
+        public var acl: acl_t?
         
         public init(target: ESFile, setOrClear: es_set_or_clear_t) {
             self.target = target
             self.setOrClear = setOrClear
         }
+        
+        enum CodingKeys: String, CodingKey {
+            case target
+            case setOrClear
+        }
     }
     
-    struct SetAttrList: Equatable {
+    struct SetAttrList: Equatable, Codable {
         public var attrlist: attrlist
         public var target: ESFile
         
@@ -659,7 +671,7 @@ public extension ESEvent {
         }
     }
     
-    struct SetExtAttr: Equatable {
+    struct SetExtAttr: Equatable, Codable {
         public var target: ESFile
         public var extattr: String
         
@@ -669,7 +681,7 @@ public extension ESEvent {
         }
     }
     
-    struct SetFlags: Equatable {
+    struct SetFlags: Equatable, Codable {
         public var flags: UInt32
         public var target: ESFile
         
@@ -679,7 +691,7 @@ public extension ESEvent {
         }
     }
     
-    struct SetMode: Equatable {
+    struct SetMode: Equatable, Codable {
         public var mode: mode_t
         public var target: ESFile
         
@@ -689,7 +701,7 @@ public extension ESEvent {
         }
     }
     
-    struct SetOwner: Equatable {
+    struct SetOwner: Equatable, Codable {
         public var uid: uid_t
         public var gid: gid_t
         public var target: ESFile
@@ -701,7 +713,7 @@ public extension ESEvent {
         }
     }
     
-    struct SetUID: Equatable {
+    struct SetUID: Equatable, Codable {
         public var uid: uid_t
         
         public init(uid: uid_t) {
@@ -709,7 +721,7 @@ public extension ESEvent {
         }
     }
     
-    struct SetREUID: Equatable {
+    struct SetREUID: Equatable, Codable {
         public var ruid: uid_t
         public var euid: uid_t
         
@@ -719,7 +731,7 @@ public extension ESEvent {
         }
     }
     
-    struct Signal: Equatable {
+    struct Signal: Equatable, Codable {
         public var sig: Int32
         public var target: ESProcess
         
@@ -729,7 +741,7 @@ public extension ESEvent {
         }
     }
     
-    struct Stat: Equatable {
+    struct Stat: Equatable, Codable {
         public var target: ESFile
         
         public init(target: ESFile) {
@@ -737,7 +749,7 @@ public extension ESEvent {
         }
     }
     
-    struct Trace: Equatable {
+    struct Trace: Equatable, Codable {
         public var target: ESProcess
         
         public init(target: ESProcess) {
@@ -745,7 +757,7 @@ public extension ESEvent {
         }
     }
     
-    struct Truncate: Equatable {
+    struct Truncate: Equatable, Codable {
         public var target: ESFile
         
         public init(target: ESFile) {
@@ -753,7 +765,7 @@ public extension ESEvent {
         }
     }
     
-    struct UipcBind: Equatable {
+    struct UipcBind: Equatable, Codable {
         public var dir: ESFile
         public var filename: String
         public var mode: mode_t
@@ -765,7 +777,7 @@ public extension ESEvent {
         }
     }
     
-    struct UipcConnect: Equatable {
+    struct UipcConnect: Equatable, Codable {
         public var file: ESFile
         public var domain: Int32
         public var type: Int32
@@ -779,7 +791,7 @@ public extension ESEvent {
         }
     }
     
-    struct Unlink: Equatable {
+    struct Unlink: Equatable, Codable {
         public var target: ESFile
         public var parentDir: ESFile
         
@@ -789,7 +801,7 @@ public extension ESEvent {
         }
     }
     
-    struct Unmount: Equatable {
+    struct Unmount: Equatable, Codable {
         public var statfs: statfs
         
         
@@ -798,7 +810,7 @@ public extension ESEvent {
         }
     }
     
-    struct Utimes: Equatable {
+    struct Utimes: Equatable, Codable {
         public var target: ESFile
         public var aTime: timespec
         public var mTime: timespec
@@ -810,7 +822,7 @@ public extension ESEvent {
         }
     }
     
-    struct Write: Equatable {
+    struct Write: Equatable, Codable {
         public var target: ESFile
         
         public init(target: ESFile) {

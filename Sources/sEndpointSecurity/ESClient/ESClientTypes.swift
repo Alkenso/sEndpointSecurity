@@ -23,7 +23,6 @@
 import EndpointSecurity
 import Foundation
 
-
 public struct ESAuthResolution: Equatable, Codable {
     public var result: ESAuthResult
     public var cache: Bool
@@ -49,18 +48,32 @@ public enum ESMuteProcess: Hashable, Codable {
     // - Patterns
     case euid(uid_t)
     
-    case name(String)
-    case pathPrefix(String)
-    case pathLiteral(String)
+    case path(String, PathType)
     
     //  Codesign Team Identifier (DEVELOPMENT_TEAM in Xcode)
     case teamIdentifier(String)
     
     //  Usually equals to application bundle identifier
     case signingID(String)
+    
+    public enum PathType: Hashable, Codable {
+        case name
+        case prefix
+        case literal
+    }
 }
 
-public struct ESClientCreateError: Error {
+extension ESMuteProcess.PathType {
+    internal var esMutePathType: es_mute_path_type_t? {
+        switch self {
+        case .prefix: return ES_MUTE_PATH_TYPE_PREFIX
+        case .literal: return ES_MUTE_PATH_TYPE_LITERAL
+        case .name: return nil
+        }
+    }
+}
+
+public struct ESClientCreateError: Error, Codable {
     public var status: es_new_client_result_t
 }
 
@@ -85,12 +98,15 @@ extension ESMuteProcess {
             return process.auditToken.pid == value
         case .euid(let value):
             return process.auditToken.euid == value
-        case .name(let value):
-            return process.executable.path.hasSuffix("/" + value)
-        case .pathPrefix(let value):
-            return process.executable.path.hasPrefix(value)
-        case .pathLiteral(let value):
-            return process.executable.path == value
+        case .path(let path, let type):
+            switch type {
+            case .name:
+                return process.executable.path.lastPathComponent == path
+            case .prefix:
+                return process.executable.path.hasPrefix(path)
+            case .literal:
+                return process.executable.path == path
+            }
         case .teamIdentifier(let value):
             return process.teamID == value
         case .signingID(let value):

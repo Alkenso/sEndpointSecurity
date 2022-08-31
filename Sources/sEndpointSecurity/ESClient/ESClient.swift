@@ -37,19 +37,19 @@ public class ESClient {
     public var messageFilterHandler: ((ESMessagePtr, ESProcess) -> Bool)?
     
     /// Handler invoked each time AUTH message is coming from EndpointSecurity.
-    /// The message MUST be replied using the second parameter - reply block.
+    /// The message SHOULD be responded using the second parameter - reply block.
     public var authMessageHandler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void) -> Void)?
     
-    /// Handler invoked for each AUTH message after it has been replied.
+    /// Handler invoked for each AUTH message after it has been responded.
     /// Userful for statistic and post-actions.
     public var postAuthMessageHandler: ((ESMessagePtr, ResponseInfo) -> Void)?
     
     /// Handler invoked each time NOTIFY message is coming from EndpointSecurity.
     public var notifyMessageHandler: ((ESMessagePtr) -> Void)?
     
-    /// Queue where all events are processed. Default to serial,  user-interactive queue.
-    /// When customized, it may be concurrent as well
-    public var eventQueue = DispatchQueue(label: "ESClient.event.queue", qos: .userInteractive)
+    /// Queue where all events are processed. Default to concurrent, user-interactive queue.
+    /// May be customized, both serial and concurrent supported.
+    public var eventQueue = DispatchQueue(label: "ESClient.event.queue", qos: .userInteractive, attributes: .concurrent)
     
     /// Initialise a new ESClient and connect to the ES subsystem. No-throw version
     /// Subscribe to some set of events
@@ -75,11 +75,12 @@ public class ESClient {
             timebaseInfo = nil
         }
         
-        let status = es_new_client(&client) { [weak self] innerClient, message in
+        let status = es_new_client(&client) { [weak self] innerClient, rawMessage in
             if let self = self {
-                self.handleMessage(message)
+                let message = ESMessagePtr(message: rawMessage)
+                self.eventQueue.async { self.handleMessage(message) }
             } else {
-                _ = innerClient.esRespond(message, flags: .max, cache: false)
+                _ = innerClient.esRespond(rawMessage, flags: .max, cache: false)
             }
         }
         
@@ -143,7 +144,14 @@ public class ESClient {
             } catch {
                 return false
             }
-        case .euid, .name, .pathPrefix, .pathLiteral, .teamIdentifier, .signingID:
+        case .path(let path, let type):
+            if #available(macOS 12.0, *), let esPathType = type.esMutePathType {
+                return client.esMutePath(path, esPathType) == ES_RETURN_SUCCESS
+            } else {
+                eventQueue.async(flags: .barrier) { self.processMuteRules.insert(mute) }
+                return true
+            }
+        case .euid, .teamIdentifier, .signingID:
             eventQueue.async(flags: .barrier) { self.processMuteRules.insert(mute) }
             return true
         }
@@ -164,22 +172,17 @@ public class ESClient {
             } catch {
                 return false
             }
-        case .euid, .name, .pathPrefix, .pathLiteral, .teamIdentifier, .signingID:
+        case .path(let path, let type):
+            if #available(macOS 12.0, *), let esPathType = type.esMutePathType {
+                return client.esUnmutePath(path, esPathType) == ES_RETURN_SUCCESS
+            } else {
+                eventQueue.async(flags: .barrier) { self.processMuteRules.remove(mute) }
+                return true
+            }
+        case .euid, .teamIdentifier, .signingID:
             eventQueue.async(flags: .barrier) { self.processMuteRules.remove(mute) }
             return true
         }
-    }
-    
-    public func mutePath(prefix: String) -> Bool {
-        es_mute_path_prefix(client, prefix) == ES_RETURN_SUCCESS
-    }
-    
-    public func mutePath(literal: String) -> Bool {
-        es_mute_path_literal(client, literal) == ES_RETURN_SUCCESS
-    }
-    
-    public func unmuteAllPaths() -> Bool {
-        es_unmute_all_paths(client) == ES_RETURN_SUCCESS
     }
     
     
@@ -188,22 +191,8 @@ public class ESClient {
     private let timebaseInfo: mach_timebase_info?
     private var processMuteRules: Set<ESMuteProcess> = []
     
-    private func shoudMuteMessage(_ message: ESMessagePtr) -> Bool {
-        let process =  ESConverter(version: message.version).esProcess(message.process)
-        guard messageFilterHandler?(message, process) != false else { return true }
-        let isMutes = processMuteRules.contains { $0.matches(process: process) }
-        return isMutes
-    }
-    
-    private func handleMessage(_ rawMessage: UnsafePointer<es_message_t>) {
-        let message = ESMessagePtr(message: rawMessage)
-        eventQueue.async {
-            self.processMessage(message)
-        }
-    }
-    
-    private func processMessage(_ message: ESMessagePtr) {
-        let isMuted = shoudMuteMessage(message)
+    private func handleMessage(_ message: ESMessagePtr) {
+        let isMuted = muteIfNeeded(message)
         
         switch message.action_type {
         case ES_ACTION_TYPE_AUTH:
@@ -228,10 +217,21 @@ public class ESClient {
         }
     }
     
+    private func muteIfNeeded(_ message: ESMessagePtr) -> Bool {
+        let process = ESConverter(version: message.version).esProcess(message.process)
+        guard messageFilterHandler?(message, process) != false else { return true }
+        let isMuted = processMuteRules.contains { $0.matches(process: process) }
+        if isMuted {
+            _ = client.esMuteProcess(process.auditToken)
+        }
+        return isMuted
+    }
+    
     private func respond(_ message: ESMessagePtr, resolution: ESAuthResolution, reason: ResponseReason, timeoutItem: DispatchWorkItem? = nil) {
+        guard timeoutItem?.isCancelled != true else { return }
         timeoutItem?.cancel()
         
-        let status = client.esRespond(message.unsafeRawMessage, flags: resolution.result.rawValue, cache: resolution.cache)
+        let status = client.esRespond(message.rawMessage, flags: resolution.result.rawValue, cache: resolution.cache)
         
         let responseInfo = ResponseInfo(reason: reason, resolution: resolution, status: status)
         postAuthMessageHandler?(message, responseInfo)
@@ -257,23 +257,23 @@ public class ESClient {
     }
 }
 
-public extension ESClient {
-    struct Config {
+extension ESClient {
+    public struct Config: Equatable, Codable {
         public var messageTimeout: MessageTimeout = .ratio(0.5)
         
-        public enum MessageTimeout {
+        public enum MessageTimeout: Equatable, Codable {
             case ratio(Double) // 0...1.0
             case seconds(TimeInterval)
         }
     }
     
-    enum ResponseReason {
+    public enum ResponseReason: Equatable, Codable {
         case muted
         case timeout
         case normal
     }
     
-    struct ResponseInfo {
+    public struct ResponseInfo: Equatable, Codable {
         public var reason: ResponseReason
         public var resolution: ESAuthResolution
         public var status: es_respond_result_t

@@ -24,7 +24,7 @@ import EndpointSecurity
 import Foundation
 
 
-extension es_event_type_t: Hashable {}
+extension es_event_type_t: Hashable, Codable {}
 
 extension es_event_type_t: CustomDebugStringConvertible {
     public var debugDescription: String {
@@ -261,7 +261,7 @@ extension es_event_type_t: CustomDebugStringConvertible {
     }
 }
 
-extension es_auth_result_t: Hashable {}
+extension es_auth_result_t: Hashable, Codable {}
 
 extension es_auth_result_t: CustomDebugStringConvertible {
     public var debugDescription: String {
@@ -280,7 +280,7 @@ extension es_auth_result_t: CustomDebugStringConvertible {
     }
 }
 
-extension es_result_type_t: Hashable {}
+extension es_result_type_t: Hashable, Codable {}
 
 extension es_result_type_t: CustomDebugStringConvertible {
     public var debugDescription: String {
@@ -299,7 +299,7 @@ extension es_result_type_t: CustomDebugStringConvertible {
     }
 }
 
-extension es_return_t: Hashable {}
+extension es_return_t: Hashable, Codable {}
 
 extension es_return_t: CustomDebugStringConvertible {
     public var debugDescription: String {
@@ -318,7 +318,7 @@ extension es_return_t: CustomDebugStringConvertible {
     }
 }
 
-extension es_respond_result_t: Hashable {}
+extension es_respond_result_t: Hashable, Codable {}
 
 extension es_respond_result_t: CustomDebugStringConvertible {
     public var debugDescription: String {
@@ -345,7 +345,7 @@ extension es_respond_result_t: CustomDebugStringConvertible {
     }
 }
 
-extension es_new_client_result_t: Hashable {}
+extension es_new_client_result_t: Hashable, Codable {}
 
 extension es_new_client_result_t: CustomDebugStringConvertible {
     public var debugDescription: String {
@@ -374,7 +374,7 @@ extension es_new_client_result_t: CustomDebugStringConvertible {
     }
 }
 
-extension es_clear_cache_result_t: Hashable {}
+extension es_clear_cache_result_t: Hashable, Codable {}
 
 extension es_clear_cache_result_t: CustomDebugStringConvertible {
     public var debugDescription: String {
@@ -394,3 +394,7 @@ extension es_clear_cache_result_t: CustomDebugStringConvertible {
         }
     }
 }
+
+extension es_proc_check_type_t: Hashable, Codable {}
+extension es_proc_suspend_resume_type_t: Hashable, Codable {}
+extension es_set_or_clear_t: Hashable, Codable {}

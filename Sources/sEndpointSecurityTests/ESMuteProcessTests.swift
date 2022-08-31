@@ -75,14 +75,14 @@ class ESMuteProcessTests: XCTestCase {
         XCTAssertFalse(ESMuteProcess.signingID("ssssq").matches(process: process))
         XCTAssertTrue(ESMuteProcess.signingID(process.signingID).matches(process: process))
         
-        XCTAssertFalse(ESMuteProcess.name("some_name").matches(process: process))
-        XCTAssertTrue(ESMuteProcess.name("test_process").matches(process: process))
+        XCTAssertFalse(ESMuteProcess.path("some_name", .name).matches(process: process))
+        XCTAssertTrue(ESMuteProcess.path("test_process", .name).matches(process: process))
         
-        XCTAssertFalse(ESMuteProcess.pathPrefix("/Volumes/usb").matches(process: process))
-        XCTAssertTrue(ESMuteProcess.pathPrefix("/root").matches(process: process))
+        XCTAssertFalse(ESMuteProcess.path("/Volumes/usb", .prefix).matches(process: process))
+        XCTAssertTrue(ESMuteProcess.path("/root", .prefix).matches(process: process))
         
-        XCTAssertFalse(ESMuteProcess.pathLiteral("/Volumes/usb").matches(process: process))
-        XCTAssertFalse(ESMuteProcess.pathLiteral("/root").matches(process: process))
-        XCTAssertTrue(ESMuteProcess.pathLiteral(process.executable.path).matches(process: process))
+        XCTAssertFalse(ESMuteProcess.path("/Volumes/usb", .literal).matches(process: process))
+        XCTAssertFalse(ESMuteProcess.path("/root", .literal).matches(process: process))
+        XCTAssertTrue(ESMuteProcess.path(process.executable.path, .literal).matches(process: process))
     }
 }
