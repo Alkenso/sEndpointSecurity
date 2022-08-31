@@ -69,17 +69,17 @@ public class ESClient {
     /// - throws: ESClientCreateError in case of error
     public init() throws {
         do {
-            _timebaseInfo = try mach_timebase_info.system()
+            timebaseInfo = try mach_timebase_info.system()
         } catch {
             log.error("Failed to get timebase info: \(error)")
-            _timebaseInfo = nil
+            timebaseInfo = nil
         }
         
-        let status = es_new_client(&_client) { [weak self] innerClient, message in
+        let status = es_new_client(&client) { [weak self] innerClient, message in
             if let self = self {
                 self.handleMessage(message)
             } else {
-                _ = innerClient.esFallback(message)
+                _ = innerClient.esRespond(message, flags: .max, cache: false)
             }
         }
         
@@ -89,7 +89,7 @@ public class ESClient {
     }
     
     deinit {
-        if let client = _client {
+        if let client = client {
             _ = es_unsubscribe_all(client)
             es_delete_client(client)
         }
@@ -101,7 +101,7 @@ public class ESClient {
     ///     - returns: Boolean indicating success or error
     /// - Note: Subscribing to new event types does not remove previous subscriptions
     public func subscribe(_ events: [es_event_type_t]) -> Bool {
-        _client.esSubscribe(events) == ES_RETURN_SUCCESS
+        client.esSubscribe(events) == ES_RETURN_SUCCESS
     }
     
     /// Unsubscribe from some set of events
@@ -111,21 +111,21 @@ public class ESClient {
     /// - Note: Events not included in the given `events` array that were previously subscribed to
     ///         will continue to be subscribed to
     public func unsubscribe(_ events: [es_event_type_t]) -> Bool {
-        _client.esUnsubscribe(events) == ES_RETURN_SUCCESS
+        client.esUnsubscribe(events) == ES_RETURN_SUCCESS
     }
     
     /// Unsubscribe from all events
     /// - Parameters:
     ///     - returns: Boolean indicating success or error
     public func unsubscribeAll() -> Bool {
-        es_unsubscribe_all(_client) == ES_RETURN_SUCCESS
+        es_unsubscribe_all(client) == ES_RETURN_SUCCESS
     }
     
     /// Clear all cached results for all clients.
     /// - Parameters:
     ///     - returns: es_clear_cache_result_t value indicating success or an error
     public func clearCache() -> es_clear_cache_result_t {
-        es_clear_cache(_client)
+        es_clear_cache(client)
     }
     
     /// Suppress all events from the process described by the given `mute` rule
@@ -135,16 +135,16 @@ public class ESClient {
     public func muteProcess(_ mute: ESMuteProcess) -> Bool {
         switch mute {
         case .token(var token):
-            return es_mute_process(_client, &token) == ES_RETURN_SUCCESS
+            return es_mute_process(client, &token) == ES_RETURN_SUCCESS
         case .pid(let pid):
             do {
                 var token = try audit_token_t(pid: pid)
-                return es_mute_process(_client, &token) == ES_RETURN_SUCCESS
+                return es_mute_process(client, &token) == ES_RETURN_SUCCESS
             } catch {
                 return false
             }
         case .euid, .name, .pathPrefix, .pathLiteral, .teamIdentifier, .signingID:
-            eventQueue.async(flags: .barrier) { self._processMuteRules.insert(mute) }
+            eventQueue.async(flags: .barrier) { self.processMuteRules.insert(mute) }
             return true
         }
     }
@@ -156,42 +156,42 @@ public class ESClient {
     public func unmuteProcess(_ mute: ESMuteProcess) -> Bool {
         switch mute {
         case .token(var token):
-            return es_unmute_process(_client, &token) == ES_RETURN_SUCCESS
+            return es_unmute_process(client, &token) == ES_RETURN_SUCCESS
         case .pid(let pid):
             do {
                 var token = try audit_token_t(pid: pid)
-                return es_unmute_process(_client, &token) == ES_RETURN_SUCCESS
+                return es_unmute_process(client, &token) == ES_RETURN_SUCCESS
             } catch {
                 return false
             }
         case .euid, .name, .pathPrefix, .pathLiteral, .teamIdentifier, .signingID:
-            eventQueue.async(flags: .barrier) { self._processMuteRules.remove(mute) }
+            eventQueue.async(flags: .barrier) { self.processMuteRules.remove(mute) }
             return true
         }
     }
     
     public func mutePath(prefix: String) -> Bool {
-        es_mute_path_prefix(_client, prefix) == ES_RETURN_SUCCESS
+        es_mute_path_prefix(client, prefix) == ES_RETURN_SUCCESS
     }
     
     public func mutePath(literal: String) -> Bool {
-        es_mute_path_literal(_client, literal) == ES_RETURN_SUCCESS
+        es_mute_path_literal(client, literal) == ES_RETURN_SUCCESS
     }
     
     public func unmuteAllPaths() -> Bool {
-        es_unmute_all_paths(_client) == ES_RETURN_SUCCESS
+        es_unmute_all_paths(client) == ES_RETURN_SUCCESS
     }
     
     
     // MARK: Private
-    private var _client: OpaquePointer!
-    private let _timebaseInfo: mach_timebase_info?
-    private var _processMuteRules: Set<ESMuteProcess> = []
+    private var client: OpaquePointer!
+    private let timebaseInfo: mach_timebase_info?
+    private var processMuteRules: Set<ESMuteProcess> = []
     
     private func shoudMuteMessage(_ message: ESMessagePtr) -> Bool {
         let process =  ESConverter(version: message.version).esProcess(message.process)
         guard messageFilterHandler?(message, process) != false else { return true }
-        let isMutes = _processMuteRules.contains { $0.matches(process: process) }
+        let isMutes = processMuteRules.contains { $0.matches(process: process) }
         return isMutes
     }
     
@@ -231,14 +231,14 @@ public class ESClient {
     private func respond(_ message: ESMessagePtr, resolution: ESAuthResolution, reason: ResponseReason, timeoutItem: DispatchWorkItem? = nil) {
         timeoutItem?.cancel()
         
-        let status = _client.esResolve(message.unsafeRawMessage, flags: resolution.result.rawValue, cache: resolution.cache)
+        let status = client.esRespond(message.unsafeRawMessage, flags: resolution.result.rawValue, cache: resolution.cache)
         
         let responseInfo = ResponseInfo(reason: reason, resolution: resolution, status: status)
         postAuthMessageHandler?(message, responseInfo)
     }
     
     private func scheduleCancel(for message: ESMessagePtr, cancellation: @escaping () -> Void) -> DispatchWorkItem? {
-        guard let timebaseInfo = _timebaseInfo else { return nil }
+        guard let timebaseInfo = timebaseInfo else { return nil }
         let machInterval = message.deadline - message.mach_time
         let fullInterval = TimeInterval(machTime: machInterval, timebase: timebaseInfo)
         
