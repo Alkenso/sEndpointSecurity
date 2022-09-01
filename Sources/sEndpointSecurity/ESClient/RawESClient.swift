@@ -43,6 +43,10 @@ extension OpaquePointer {
         withRawValues(events) { es_unsubscribe(self, $0, $1) }
     }
     
+    public func esClearCache() -> es_clear_cache_result_t {
+        es_clear_cache(self)
+    }
+    
     public func esUnsubscribeAll() -> es_return_t {
         es_unsubscribe_all(self)
     }
@@ -53,6 +57,22 @@ extension OpaquePointer {
     
     public func esUnmuteProcess(_ auditToken: audit_token_t) -> es_return_t {
         withUnsafePointer(to: auditToken) { es_unmute_process(self,  $0) }
+    }
+    
+    public func esMutedProcesses() -> [audit_token_t]? {
+        if #available(macOS 12.0, *) {
+            var processes: UnsafeMutablePointer<es_muted_processes_t>!
+            guard es_muted_processes_events(self, &processes) == ES_RETURN_SUCCESS else { return nil }
+            defer { processes.deallocate() }
+            return Array(UnsafeBufferPointer(start: processes.pointee.processes, count: processes.pointee.count))
+                .map(\.audit_token)
+        } else {
+            var count: Int = 0
+            var tokens: UnsafeMutablePointer<audit_token_t>!
+            guard es_muted_processes(self, &count, &tokens) == ES_RETURN_SUCCESS else { return nil }
+            defer { tokens.deallocate() }
+            return Array(UnsafeBufferPointer(start: tokens, count: count))
+        }
     }
     
     @available(macOS 12.0, *)

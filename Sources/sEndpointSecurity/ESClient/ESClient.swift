@@ -30,11 +30,12 @@ private let log = SCLogger.internalLog(.client)
 public class ESClient {
     public var config = Config()
     
-    /// Perfonamce-sensitive handler, called **synchronously** for each message.
+    /// Perform process filtering, additionally to 'mute' rules.
+    /// Should be used for granular process filtering.
+    /// Return `false` if process should be muted and all related messages skipped.
+    /// - Warning: Perfonamce-sensitive handler, called **synchronously** for each process.
     /// Do here as minimum work as possible.
-    /// To filter processes, use mute/unmute process methods.
-    /// Provided ESProcess can be used to avoid parsing of whole message.
-    public var messageFilterHandler: ((ESMessagePtr, ESProcess) -> Bool)?
+    public var processFilterHandler: ((ESProcess) -> Bool)?
     
     /// Handler invoked each time AUTH message is coming from EndpointSecurity.
     /// The message SHOULD be responded using the second parameter - reply block.
@@ -91,7 +92,7 @@ public class ESClient {
     
     deinit {
         if let client = client {
-            _ = es_unsubscribe_all(client)
+            _ = client.esUnsubscribeAll())
             es_delete_client(client)
         }
     }
@@ -119,14 +120,30 @@ public class ESClient {
     /// - Parameters:
     ///     - returns: Boolean indicating success or error
     public func unsubscribeAll() -> Bool {
-        es_unsubscribe_all(client) == ES_RETURN_SUCCESS
+        client.esUnsubscribeAll() == ES_RETURN_SUCCESS
     }
     
     /// Clear all cached results for all clients.
     /// - Parameters:
     ///     - returns: es_clear_cache_result_t value indicating success or an error
     public func clearCache() -> es_clear_cache_result_t {
-        es_clear_cache(client)
+        client.esClearCache()
+    }
+    
+    /// Clear muted processes (mute rules are not changed).
+    /// All processes muted by 'processFilterHandler' or 'muteProcess' rules will be re-evaluated.
+    public func clearMutedProcesses() {
+        eventQueue.async(flags: .barrier) { [self] in
+            guard let muted = client.esMutedProcesses() else {
+                log.error("Failed to get muted processes")
+                return
+            }
+            muted.forEach {
+                if client.esUnmuteProcess($0) != ES_RETURN_SUCCESS {
+                    log.error("Failed to unmute process with pid = \($0.pid)")
+                }
+            }
+        }
     }
     
     /// Suppress all events from the process described by the given `mute` rule
@@ -192,7 +209,10 @@ public class ESClient {
     private var processMuteRules: Set<ESMuteProcess> = []
     
     private func handleMessage(_ message: ESMessagePtr) {
-        let isMuted = muteIfNeeded(message)
+        let isMuted = shouldMute(message)
+        if isMuted {
+            _ = client.esMuteProcess(message.process.pointee.audit_token)
+        }
         
         switch message.action_type {
         case ES_ACTION_TYPE_AUTH:
@@ -217,14 +237,10 @@ public class ESClient {
         }
     }
     
-    private func muteIfNeeded(_ message: ESMessagePtr) -> Bool {
+    private func shouldMute(_ message: ESMessagePtr) -> Bool {
         let process = ESConverter(version: message.version).esProcess(message.process)
-        guard messageFilterHandler?(message, process) != false else { return true }
-        let isMuted = processMuteRules.contains { $0.matches(process: process) }
-        if isMuted {
-            _ = client.esMuteProcess(process.auditToken)
-        }
-        return isMuted
+        guard processFilterHandler?(process) != false else { return true }
+        return processMuteRules.contains { $0.matches(process: process) }
     }
     
     private func respond(_ message: ESMessagePtr, resolution: ESAuthResolution, reason: ResponseReason, timeoutItem: DispatchWorkItem? = nil) {
@@ -265,6 +281,8 @@ extension ESClient {
             case ratio(Double) // 0...1.0
             case seconds(TimeInterval)
         }
+        
+        public init() {}
     }
     
     public enum ResponseReason: Equatable, Codable {
@@ -277,5 +295,11 @@ extension ESClient {
         public var reason: ResponseReason
         public var resolution: ESAuthResolution
         public var status: es_respond_result_t
+        
+        public init(reason: ESClient.ResponseReason, resolution: ESAuthResolution, status: es_respond_result_t) {
+            self.reason = reason
+            self.resolution = resolution
+            self.status = status
+        }
     }
 }

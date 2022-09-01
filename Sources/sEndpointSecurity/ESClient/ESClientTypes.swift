@@ -33,11 +33,11 @@ public struct ESAuthResolution: Equatable, Codable {
     }
 }
 
-public extension ESAuthResolution {
-    static let allow = ESAuthResolution(result: .auth(true), cache: true)
-    static let allowOnce = ESAuthResolution(result: .auth(true), cache: false)
-    static let deny = ESAuthResolution(result: .auth(false), cache: true)
-    static let denyOnce = ESAuthResolution(result: .auth(false), cache: false)
+extension ESAuthResolution {
+    public static let allow = ESAuthResolution(result: .auth(true), cache: true)
+    public static let allowOnce = ESAuthResolution(result: .auth(true), cache: false)
+    public static let deny = ESAuthResolution(result: .auth(false), cache: true)
+    public static let denyOnce = ESAuthResolution(result: .auth(false), cache: false)
 }
 
 public enum ESMuteProcess: Hashable, Codable {
