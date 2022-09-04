@@ -24,7 +24,6 @@ import EndpointSecurity
 import Foundation
 import SwiftConvenience
 
-
 extension es_message_t: LocalConstructible {
     func encode(with writer: inout BinaryWriter) throws {
         writer.userInfo.setMessageVersion(version)
@@ -229,7 +228,6 @@ extension es_thread_state_t: LocalConstructible {
     func encode(with writer: inout BinaryWriter) throws {
         try writer.append(flavor)
         try state.encode(with: &writer)
-        
     }
     
     mutating func decode(from reader: inout BinaryReader) throws {
@@ -950,7 +948,6 @@ extension es_events_t {
         try body(&exec)
     }
 }
-
 
 // MARK: - Events
 

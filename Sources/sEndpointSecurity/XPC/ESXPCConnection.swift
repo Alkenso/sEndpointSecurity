@@ -30,9 +30,8 @@ class ESXPCConnection {
     typealias ConnectResult = Result<es_new_client_result_t, Error>
     var connectionStateHandler: ((ConnectResult) -> Void)?
     
-    
     init(delegate: ESClientXPCDelegateProtocol, createConnection: @escaping () -> NSXPCConnection) {
-        _delegate = delegate
+        self._delegate = delegate
         
         let prepareConnection = { () -> NSXPCConnection in
             let connection = createConnection()
@@ -40,12 +39,12 @@ class ESXPCConnection {
             connection.exportedInterface = .esClientDelegate
             return connection
         }
-        _createConnection = prepareConnection
+        self._createConnection = prepareConnection
         
         let dummyConnection = prepareConnection()
         dummyConnection.resume()
         dummyConnection.invalidate()
-        _xpcConnection = dummyConnection
+        self._xpcConnection = dummyConnection
     }
     
     func connect(async: Bool, notify: ((ConnectResult) -> Void)?) {
@@ -84,13 +83,12 @@ class ESXPCConnection {
         _xpcConnection.invalidate()
     }
     
-    
     // MARK: Private
+
     private let _delegate: ESClientXPCDelegateProtocol
     private let _createConnection: () -> NSXPCConnection
     @Atomic private var _xpcConnection: NSXPCConnection
     @Atomic private var _reconnectOnFailure = true
-    
     
     private func reconnect() {
         guard _reconnectOnFailure else { return }

@@ -25,11 +25,11 @@ import EndpointSecurity
 extension OpaquePointer {
     public func esRespond(_ message: UnsafePointer<es_message_t>, flags: UInt32, cache: Bool) -> es_respond_result_t {
         switch message.pointee.event_type {
-            // flags requests
+        // flags requests
         case ES_EVENT_TYPE_AUTH_OPEN:
             return es_respond_flags_result(self, message, flags, cache)
             
-            // rest are auth requests
+        // rest are auth requests
         default:
             return es_respond_auth_result(self, message, flags > 0 ? ES_AUTH_RESULT_ALLOW : ES_AUTH_RESULT_DENY, cache)
         }
@@ -52,11 +52,11 @@ extension OpaquePointer {
     }
     
     public func esMuteProcess(_ auditToken: audit_token_t) -> es_return_t {
-        withUnsafePointer(to: auditToken) { es_mute_process(self,  $0) }
+        withUnsafePointer(to: auditToken) { es_mute_process(self, $0) }
     }
     
     public func esUnmuteProcess(_ auditToken: audit_token_t) -> es_return_t {
-        withUnsafePointer(to: auditToken) { es_unmute_process(self,  $0) }
+        withUnsafePointer(to: auditToken) { es_unmute_process(self, $0) }
     }
     
     public func esMutedProcesses() -> [audit_token_t]? {
@@ -89,7 +89,7 @@ extension OpaquePointer {
         }
     }
     
-    public func esMutePath( _ path: String, _ type: es_mute_path_type_t) -> es_return_t {
+    public func esMutePath(_ path: String, _ type: es_mute_path_type_t) -> es_return_t {
         guard #unavailable(macOS 12.0) else {
             return es_mute_path(self, path, type)
         }
@@ -109,7 +109,7 @@ extension OpaquePointer {
     }
     
     @available(macOS 12.0, *)
-    public func esUnmutePath( _ path: String, _ type: es_mute_path_type_t) -> es_return_t {
+    public func esUnmutePath(_ path: String, _ type: es_mute_path_type_t) -> es_return_t {
         es_unmute_path(self, path, type)
     }
     

@@ -23,7 +23,6 @@
 import EndpointSecurity
 import Foundation
 
-
 typealias ESMessagePtrXPC = Data
 typealias ESMuteProcessXPC = Data
 

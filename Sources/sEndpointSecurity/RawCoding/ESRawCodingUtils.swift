@@ -23,7 +23,6 @@
 import Foundation
 import SwiftConvenience
 
-
 // MARK: - LocalConstructible
 
 protocol LocalConstructible {
@@ -77,7 +76,6 @@ extension Optional {
         }
     }
 }
-
 
 // MARK: - DataReader/Writer userInfo
 

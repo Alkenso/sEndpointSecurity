@@ -36,7 +36,6 @@ public class ESXPCClient {
     @Atomic private var _connection: ESXPCConnection
     private let _delegate: ESClientXPCDelegate
 
-
     // MARK: Initialization & Activation
 
     public convenience init(_ createConnection: @escaping @autoclosure () -> NSXPCConnection) {
@@ -45,8 +44,8 @@ public class ESXPCClient {
 
     public init(_ createConnection: @escaping () -> NSXPCConnection) {
         let delegate = ESClientXPCDelegate()
-        _connection = ESXPCConnection(delegate: delegate, createConnection: createConnection)
-        _delegate = delegate
+        self._connection = ESXPCConnection(delegate: delegate, createConnection: createConnection)
+        self._delegate = delegate
     }
 
     deinit {
@@ -67,7 +66,6 @@ public class ESXPCClient {
         _connection.invalidate()
     }
 
-
     private func activate(async: Bool, completion: @escaping (Result<es_new_client_result_t, Error>) -> Void) {
         _delegate.authMessageHandler = authMessageHandler
         _delegate.notifyMessageHandler = notifyMessageHandler
@@ -77,7 +75,6 @@ public class ESXPCClient {
 
         _connection.connect(async: async, notify: completion)
     }
-
 
     // MARK: ES Client
 
@@ -122,7 +119,6 @@ public class ESXPCClient {
         }
     }
 
-
     private func remoteObjectProxy<T>(_ errorHandler: @escaping (Result<T, Error>) -> Void) -> ESClientXPCProtocol? {
         _connection.remoteObjectProxy { errorHandler(.failure($0)) }
     }
@@ -164,7 +160,6 @@ extension ESXPCCustomMessage {
     }
 }
 
-
 private class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
     var authMessageHandler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void) -> Void)?
     var notifyMessageHandler: ((ESMessagePtr) -> Void)?
@@ -190,7 +185,6 @@ private class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
             reply(Self.fallback.result.rawValue, Self.fallback.cache)
             log.error("Failed to decode ESMessagePtr from auth event data. Error: \(error)")
         }
-
     }
 
     func handleNotify(_ message: ESMessagePtrXPC) {

@@ -31,12 +31,11 @@ public class ESXPCService: NSObject {
     public var verifyConnectionHandler: ((audit_token_t) -> Bool)?
     public var receiveCustomMessageHandler: ((_ message: ESXPCCustomMessage, _ peer: UUID) -> Void)?
 
-    
     /// When receiving incoming conneciton, ESXPCService creates one ESClient for each connection.
     /// You can setup all message handlers of ESClient prior to returning it from 'createConnection'.
     public init(listener: NSXPCListener, createClient: @escaping () throws -> ESClient) {
-        _listener = listener
-        _createClient = createClient
+        self._listener = listener
+        self._createClient = createClient
 
         super.init()
 
@@ -51,8 +50,8 @@ public class ESXPCService: NSObject {
         _sendCustomMessage.notify((message, peer))
     }
 
-
     // MARK: Private
+
     private let _sendCustomMessage = EventNotify<(message: ESXPCCustomMessage, peer: UUID)>()
     private let _createClient: () throws -> ESClient
     private let _listener: NSXPCListener
@@ -98,10 +97,9 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
     var receiveCustomMessageHandler: ((ESXPCCustomMessage) -> Void)?
     var parentSubscription: Any?
 
-
     init(delegate: ESClientXPCDelegateProtocol, createClient: @escaping () throws -> ESClient) {
-        _delegate = delegate
-        _createClient = createClient
+        self._delegate = delegate
+        self._createClient = createClient
     }
 
     func sendCustomMessage(_ message: ESXPCCustomMessage) {
@@ -193,8 +191,8 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
         }
     }
 
-
     // MARK: Private
+
     private let _sendCustomMessage = EventNotify<ESXPCCustomMessage>()
     private let _queue = DispatchQueue(label: "ESXPCServiceClient.queue")
     private let _createClient: () throws -> ESClient
@@ -202,7 +200,6 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
     private var _cancellables: [AnyCancellable] = []
     private var _client: ESClient?
 
-    
     private func handleAuthMessage(_ message: ESMessagePtr, completion: @escaping (ESAuthResolution) -> Void) {
         processMessage(
             message,
@@ -261,7 +258,7 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
     
     private static func authenticate(
         _ message: ESMessagePtr,
-        handler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void)-> Void)?,
+        handler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void) -> Void)?,
         completion: @escaping (ESAuthResolution?) -> Void
     ) {
         if let handler = handler {

@@ -23,6 +23,6 @@ let package = Package(
         .testTarget(
             name: "sEndpointSecurityTests",
             dependencies: ["sEndpointSecurity"]
-        )
+        ),
     ]
 )

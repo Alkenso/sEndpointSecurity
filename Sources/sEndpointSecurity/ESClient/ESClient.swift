@@ -21,8 +21,8 @@
 //  SOFTWARE.
 
 import Combine
-import Foundation
 import EndpointSecurity
+import Foundation
 import SwiftConvenience
 
 private let log = SCLogger.internalLog(.client)
@@ -70,10 +70,10 @@ public class ESClient {
     /// - throws: ESClientCreateError in case of error
     public init() throws {
         do {
-            timebaseInfo = try mach_timebase_info.system()
+            self.timebaseInfo = try mach_timebase_info.system()
         } catch {
             log.error("Failed to get timebase info: \(error)")
-            timebaseInfo = nil
+            self.timebaseInfo = nil
         }
         
         let status = es_new_client(&client) { [weak self] innerClient, rawMessage in
@@ -202,8 +202,8 @@ public class ESClient {
         }
     }
     
-    
     // MARK: Private
+
     private var client: OpaquePointer!
     private let timebaseInfo: mach_timebase_info?
     private var processMuteRules: Set<ESMuteProcess> = []
@@ -233,7 +233,6 @@ public class ESClient {
             notifyMessageHandler?(message)
         default:
             log.warning("Unknown es_action type = \(message.action_type)")
-            break
         }
     }
     

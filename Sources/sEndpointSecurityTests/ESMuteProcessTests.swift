@@ -27,7 +27,6 @@ import Foundation
 import SwiftConvenience
 import XCTest
 
-
 class ESMuteProcessTests: XCTestCase {
     func process() throws -> ESProcess {
         try ESProcess(

@@ -27,7 +27,6 @@ import Foundation
 import SwiftConvenience
 import XCTest
 
-
 class ESMessageSerializationTests: XCTestCase {
     struct TestEntity<ES, Converted> {
         var resource: Resource<ES>
@@ -96,12 +95,11 @@ class ESMessageSerializationTests: XCTestCase {
             )
         )
         let process = Resource.raii(rawProcess) {
-            withExtendedLifetime([rawSigningID, rawTeamID, rawExecutableFile, rawTTYFile], {})
+            withExtendedLifetime([rawSigningID, rawTeamID, rawExecutableFile, rawTTYFile]) {}
             $0.deallocate()
         }
         testESProcess = .init(resource: process, converted: converter.esProcess(process.unsafeValue))
     }
-    
     
     func test_es_string() throws {
         let str = "qwerty"
@@ -142,7 +140,7 @@ class ESMessageSerializationTests: XCTestCase {
         let rawTeamID = rawESString("Team ID")
         let rawExecutableFile = rawESFile(Bundle.main.bundleURL.path, truncated: true, stat: testFileStat1)
         let rawTTYFile = rawESFile("/path/to/tty/file", truncated: true, stat: testFileStat1)
-        defer { withExtendedLifetime([rawSigningID, rawTeamID, rawExecutableFile, rawTTYFile], {}) }
+        defer { withExtendedLifetime([rawSigningID, rawTeamID, rawExecutableFile, rawTTYFile]) {} }
         
         let rawInitial = try es_process_t(
             audit_token: .current(),
@@ -195,7 +193,7 @@ class ESMessageSerializationTests: XCTestCase {
     func test_es_thread_state() throws {
         let state = Data([0x00, 0x01, 0x02, 0x03, 0x04])
         let rawState = rawESToken(state)
-        defer { withExtendedLifetime(rawState, {}) }
+        defer { withExtendedLifetime(rawState) {} }
         
         let rawInitial = es_thread_state_t(flavor: 100500, state: rawState.unsafeValue)
         let rawRestored = try encodeDecode(rawInitial)
@@ -249,10 +247,10 @@ class ESMessageSerializationTests: XCTestCase {
         let rawTeamID = rawESString("Team ID")
         let rawExecutableFile = rawESFile(Bundle.main.bundleURL.path, truncated: true, stat: testFileStat1)
         let rawTTYFile = rawESFile("/path/to/tty/file", truncated: true, stat: testFileStat1)
-        defer { withExtendedLifetime([rawSigningID, rawTeamID, rawExecutableFile, rawTTYFile], {}) }
+        defer { withExtendedLifetime([rawSigningID, rawTeamID, rawExecutableFile, rawTTYFile]) {} }
         
         let rawFile = try rawESFile("/path/to/executable/file", truncated: true, stat: .random())
-        defer { withExtendedLifetime(rawFile, {}) }
+        defer { withExtendedLifetime(rawFile) {} }
         
         let rawInitial = UnsafeMutablePointer<es_message_t>.allocate(capacity: 1)
         rawInitial.bzero()
@@ -387,7 +385,7 @@ extension ESMessageSerializationTests {
             let restored = try encodeDecode(eventType, initial)
             let converted = try converter.esEvent(eventType, restored)
             
-            if case let .clone(convertedEvent) = converted {
+            if case .clone(let convertedEvent) = converted {
                 XCTAssertEqual(convertedEvent.source, testESFile1.converted)
                 XCTAssertEqual(convertedEvent.targetDir, testESFile2.converted)
                 XCTAssertEqual(convertedEvent.targetName, testESString1.converted)
@@ -421,7 +419,7 @@ extension ESMessageSerializationTests {
             let restored = try encodeDecode(eventType, initial)
             let converted = try converter.esEvent(eventType, restored)
             
-            if case let .copyfile(convertedEvent) = converted {
+            if case .copyfile(let convertedEvent) = converted {
                 XCTAssertEqual(convertedEvent.source, testESFile1.converted)
                 XCTAssertEqual(convertedEvent.targetFile, testESFile2.converted)
                 XCTAssertEqual(convertedEvent.targetDir, testESFile1.converted)
@@ -535,7 +533,7 @@ extension ESMessageSerializationTests {
             let restored = try encodeDecode(eventType, initial)
             let converted = try converter.esEvent(eventType, restored)
             
-            if case let .deleteextattr(convertedEvent) = converted {
+            if case .deleteextattr(let convertedEvent) = converted {
                 XCTAssertEqual(convertedEvent.extattr, testESString1.converted)
                 XCTAssertEqual(convertedEvent.target, testESFile1.converted)
             } else {
@@ -851,7 +849,7 @@ extension ESMessageSerializationTests {
             let restored = try encodeDecode(eventType, initial)
             let converted = try converter.esEvent(eventType, restored)
             
-            if case let .getextattr(convertedEvent) = converted {
+            if case .getextattr(let convertedEvent) = converted {
                 XCTAssertEqual(convertedEvent.target, testESFile1.converted)
                 XCTAssertEqual(convertedEvent.extattr, testESString1.converted)
             } else {
@@ -879,7 +877,7 @@ extension ESMessageSerializationTests {
             let restored = try encodeDecode(eventType, initial)
             let converted = try converter.esEvent(eventType, restored)
             
-            if case let .iokitOpen(convertedEvent) = converted {
+            if case .iokitOpen(let convertedEvent) = converted {
                 XCTAssertEqual(convertedEvent.userClientType, 1)
                 XCTAssertEqual(convertedEvent.userClientClass, testESString1.converted)
             } else {
@@ -1464,8 +1462,8 @@ extension ESMessageSerializationTests {
                     .init(
                         uid: 123,
                         gid: 456,
-                        target: testESFile1.converted)
-                    
+                        target: testESFile1.converted
+                    )
                 )
             )
         }
@@ -1822,12 +1820,12 @@ private extension ESMessageSerializationTests {
         
         return .raii(rawFile) {
             $0.deallocate()
-            withExtendedLifetime(pathPtr, {})
+            withExtendedLifetime(pathPtr) {}
         }
     }
 }
 
-private func withExtendedLifetime(_ values: [Any], _ body: () throws -> Void) rethrows -> Void {
+private func withExtendedLifetime(_ values: [Any], _ body: () throws -> Void) rethrows {
     try withExtendedLifetime(values as Any, body)
 }
 

@@ -24,7 +24,6 @@ import EndpointSecurity
 import Foundation
 import SwiftConvenience
 
-
 public struct ESMessage: Equatable, Codable {
     public var version: UInt32
     public var time: timespec
@@ -625,7 +624,6 @@ public extension ESEvent {
             case newPath(dir: ESFile, filename: String)
         }
         
-        
         public init(source: ESFile, destination: ESEvent.Rename.Destination) {
             self.source = source
             self.destination = destination
@@ -803,7 +801,6 @@ public extension ESEvent {
     
     struct Unmount: Equatable, Codable {
         public var statfs: statfs
-        
         
         public init(statfs: statfs) {
             self.statfs = statfs

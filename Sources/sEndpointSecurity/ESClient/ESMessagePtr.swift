@@ -24,7 +24,6 @@ import EndpointSecurity
 import Foundation
 import SwiftConvenience
 
-
 @dynamicMemberLookup
 public class ESMessagePtr {
     private enum Ownership {
@@ -44,22 +43,22 @@ public class ESMessagePtr {
         } else {
             self.rawMessage = UnsafePointer(es_copy_message(message)!)
         }
-        ownership = .retained
+        self.ownership = .retained
     }
     
     /// Initializes with message without copying or retaining it.
     /// Use ONLY if you are sure that message outlives this instance.
     public init(unowned message: UnsafePointer<es_message_t>) {
         self.rawMessage = message
-        ownership = .unowned
+        self.ownership = .unowned
     }
     
     /// Creates message from data, obtained from 'serialize'.
     /// Do NOT use instances of messages created by this init with es_xxx API.
     public init(data: Data) throws {
         var reader = BinaryReader(data: data)
-        rawMessage = UnsafePointer(try UnsafeMutablePointer<es_message_t>.allocate(from: &reader))
-        ownership = .allocated
+        self.rawMessage = UnsafePointer(try UnsafeMutablePointer<es_message_t>.allocate(from: &reader))
+        self.ownership = .allocated
     }
     
     deinit {

@@ -26,7 +26,6 @@ import Foundation
 import SwiftConvenience
 import XCTest
 
-
 class EESClientTests: XCTestCase {
     func test_ESAuthResult_flags() {
         XCTAssertEqual(ESAuthResult.auth(true), .flags(.max))
@@ -45,28 +44,28 @@ class EESClientTests: XCTestCase {
         )
         XCTAssertEqual(
             ESAuthResolution.combine([
-                ESAuthResolution(result: .flags(123), cache: true)
+                ESAuthResolution(result: .flags(123), cache: true),
             ]),
             ESAuthResolution(result: .flags(123), cache: true)
         )
         XCTAssertEqual(
             ESAuthResolution.combine([
                 ESAuthResolution(result: .auth(true), cache: false),
-                ESAuthResolution(result: .flags(123), cache: true)
+                ESAuthResolution(result: .flags(123), cache: true),
             ]),
             ESAuthResolution(result: .flags(123), cache: false)
         )
         XCTAssertEqual(
             ESAuthResolution.combine([
                 ESAuthResolution(result: .auth(false), cache: false),
-                ESAuthResolution(result: .flags(123), cache: true)
+                ESAuthResolution(result: .flags(123), cache: true),
             ]),
             ESAuthResolution(result: .auth(false), cache: false)
         )
         XCTAssertEqual(
             ESAuthResolution.combine([
                 ESAuthResolution(result: .auth(true), cache: false),
-                ESAuthResolution(result: .flags(0), cache: true)
+                ESAuthResolution(result: .flags(0), cache: true),
             ]),
             ESAuthResolution(result: .auth(false), cache: false)
         )

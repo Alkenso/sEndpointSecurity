@@ -23,7 +23,6 @@
 import EndpointSecurity
 import Foundation
 
-
 extension es_event_type_t: Hashable, Codable {}
 
 extension es_event_type_t: CustomDebugStringConvertible {

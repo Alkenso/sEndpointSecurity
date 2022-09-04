@@ -24,7 +24,6 @@ import EndpointSecurity
 import Foundation
 import SwiftConvenience
 
-
 public struct ESConverter {
     public var version: UInt32
     
@@ -376,7 +375,7 @@ public extension ESConverter {
         .init(source: esFile(es.source), targetDir: esFile(es.target_dir), targetName: esString(es.target_name))
     }
     
-    func esEvent(copyfile es: es_event_copyfile_t) -> ESEvent.CopyFile{
+    func esEvent(copyfile es: es_event_copyfile_t) -> ESEvent.CopyFile {
         .init(source: esFile(es.source), targetFile: es.target_file.flatMap(esFile), targetDir: esFile(es.target_dir), targetName: esString(es.target_name), mode: es.mode, flags: es.flags)
     }
     
