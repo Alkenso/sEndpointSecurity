@@ -92,7 +92,7 @@ public class ESClient {
     
     deinit {
         if let client = client {
-            _ = client.esUnsubscribeAll())
+            _ = client.esUnsubscribeAll()
             es_delete_client(client)
         }
     }
