@@ -253,7 +253,7 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
     }
 
     private func decodeMute(_ mute: ESMuteProcessXPC) -> ESMuteProcess? {
-        ESMuteProcess(json: mute, log: log)
+        ESMuteProcess(from: mute, decoder: .json(), log: log)
     }
     
     private static func authenticate(
