@@ -831,3 +831,25 @@ public extension ESEvent {
         }
     }
 }
+
+extension ESEvent.Create.Destination {
+    public var path: String {
+        switch self {
+        case .existingFile(let file):
+            return file.path
+        case .newPath(let dir, let filename, _):
+            return dir.path.appendingPathComponent(filename)
+        }
+    }
+}
+
+extension ESEvent.Rename.Destination {
+    public var path: String {
+        switch self {
+        case .existingFile(let file):
+            return file.path
+        case .newPath(let dir, let filename):
+            return dir.path.appendingPathComponent(filename)
+        }
+    }
+}
