@@ -33,7 +33,7 @@ public class ESClient {
     /// Perform process filtering, additionally to 'mute' rules.
     /// Should be used for granular process filtering.
     /// Return `false` if process should be muted and all related messages skipped.
-    /// - Warning: Perfonamce-sensitive handler, called **synchronously** for each process.
+    /// - Warning: Perfonamce-sensitive handler, called **synchronously** for each process on `eventQueue`.
     /// Do here as minimum work as possible.
     public var processFilterHandler: ((ESProcess) -> Bool)?
     
@@ -48,9 +48,12 @@ public class ESClient {
     /// Handler invoked each time NOTIFY message is coming from EndpointSecurity.
     public var notifyMessageHandler: ((ESMessagePtr) -> Void)?
     
-    /// Queue where all events are processed. Default to serial, user-interactive queue.
-    /// May be customized, both serial and concurrent queues are supported.
-    public var eventQueue = DispatchQueue(label: "ESClient.event.queue", qos: .userInteractive)
+    /// Queue where `authMessageHandler`, `postAuthMessageHandler` and `notifyMessageHandler` handlers are called.
+    /// Defaults to `nil` which means all handlers are called directly on `eventQueue`.
+    public var queue: DispatchQueue?
+    
+    /// Queue where all events are processed. Serial, user-interactive queue.
+    public let eventQueue = DispatchQueue(label: "ESClient.event.queue", qos: .userInteractive)
     
     /// Initialise a new ESClient and connect to the ES subsystem. No-throw version
     /// Subscribe to some set of events
@@ -133,7 +136,9 @@ public class ESClient {
     /// Clear muted processes (mute rules are not changed).
     /// All processes muted by 'processFilterHandler' or 'muteProcess' rules will be re-evaluated.
     public func clearMutedProcesses() {
-        eventQueue.async(flags: .barrier) { [self] in
+        eventQueue.async { [self] in
+            mutedProcessesCache.removeAll()
+            
             guard let muted = client.esMutedProcesses() else {
                 log.error("Failed to get muted processes")
                 return
@@ -154,7 +159,7 @@ public class ESClient {
         if let result = muteNative(mute) {
             return result
         } else {
-            eventQueue.async(flags: .barrier) { self.processMuteRules.insert(mute) }
+            eventQueue.async { self.processMuteRules.insert(mute) }
             return true
         }
     }
@@ -189,7 +194,7 @@ public class ESClient {
         if let result = unmuteNative(mute) {
             return result
         } else {
-            eventQueue.async(flags: .barrier) { self.processMuteRules.remove(mute) }
+            eventQueue.async { self.processMuteRules.remove(mute) }
             return true
         }
     }
@@ -221,9 +226,10 @@ public class ESClient {
     private var client: OpaquePointer!
     private let timebaseInfo: mach_timebase_info?
     private var processMuteRules: Set<ESMuteProcess> = []
+    private var mutedProcessesCache: [ExecutableID: Bool] = [:]
     
     private func handleMessage(_ message: ESMessagePtr) {
-        let isMuted = shouldMute(message)
+        let isMuted = checkMuted(message)
         if isMuted {
             _ = client.esMuteProcess(message.process.pointee.audit_token)
         }
@@ -239,21 +245,33 @@ public class ESClient {
                 self.respond(message, resolution: .allowOnce, reason: .timeout)
             }
             
-            authMessageHandler(message) {
-                self.respond(message, resolution: $0, reason: .normal, timeoutItem: item)
+            queue.async {
+                authMessageHandler(message) {
+                    self.respond(message, resolution: $0, reason: .normal, timeoutItem: item)
+                }
             }
         case ES_ACTION_TYPE_NOTIFY:
             guard !isMuted else { return }
-            notifyMessageHandler?(message)
+            queue.async { self.notifyMessageHandler?(message) }
         default:
             log.warning("Unknown es_action type = \(message.action_type)")
         }
     }
     
-    private func shouldMute(_ message: ESMessagePtr) -> Bool {
+    private func checkMuted(_ message: ESMessagePtr) -> Bool {
         let process = ESConverter(version: message.version).esProcess(message.process)
-        guard processFilterHandler?(process) != false else { return true }
-        return processMuteRules.contains { $0.matches(process: process) }
+        let processID = ExecutableID(path: process.executable.path, cdHash: process.cdHash)
+        if let isMuted = mutedProcessesCache[processID] {
+            return isMuted
+        }
+        
+        var isMuted = false
+        isMuted = isMuted || processFilterHandler?(process) == false
+        isMuted = isMuted || processMuteRules.contains { $0.matches(process: process) }
+        
+        mutedProcessesCache[processID] = isMuted
+        
+        return isMuted
     }
     
     private func respond(_ message: ESMessagePtr, resolution: ESAuthResolution, reason: ResponseReason, timeoutItem: DispatchWorkItem? = nil) {
@@ -263,7 +281,9 @@ public class ESClient {
         let status = client.esRespond(message.rawMessage, flags: resolution.result.rawValue, cache: resolution.cache)
         
         let responseInfo = ResponseInfo(reason: reason, resolution: resolution, status: status)
-        postAuthMessageHandler?(message, responseInfo)
+        if let postAuthMessageHandler = postAuthMessageHandler {
+            queue.async { postAuthMessageHandler(message, responseInfo) }
+        }
     }
     
     private func scheduleCancel(for message: ESMessagePtr, cancellation: @escaping () -> Void) -> DispatchWorkItem? {
@@ -315,4 +335,20 @@ extension ESClient {
             self.status = status
         }
     }
+}
+
+private extension Optional where Wrapped == DispatchQueue {
+    @inline(__always)
+    func async(execute work: @escaping () -> Void) {
+        if let self = self {
+            self.async(execute: work)
+        } else {
+            work()
+        }
+    }
+}
+
+private struct ExecutableID: Hashable {
+    var path: String
+    var cdHash: Data
 }
