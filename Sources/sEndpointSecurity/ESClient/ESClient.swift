@@ -151,6 +151,15 @@ public class ESClient {
     ///     - mute: The rule to mute processes that match it
     ///     - returns: Boolean indicating success or error
     public func muteProcess(_ mute: ESMuteProcess) -> Bool {
+        if let result = muteNative(mute) {
+            return result
+        } else {
+            eventQueue.async(flags: .barrier) { self.processMuteRules.insert(mute) }
+            return true
+        }
+    }
+    
+    private func muteNative(_ mute: ESMuteProcess) -> Bool? {
         switch mute {
         case .token(var token):
             return es_mute_process(client, &token) == ES_RETURN_SUCCESS
@@ -162,15 +171,13 @@ public class ESClient {
                 return false
             }
         case .path(let path, let type):
-            if #available(macOS 12.0, *), let esPathType = type.esMutePathType {
-                return client.esMutePath(path, esPathType) == ES_RETURN_SUCCESS
+            if #available(macOS 12.0, *) {
+                return client.esMutePath(path, type.esMutePathType) == ES_RETURN_SUCCESS
             } else {
-                eventQueue.async(flags: .barrier) { self.processMuteRules.insert(mute) }
-                return true
+                return nil
             }
-        case .euid, .teamIdentifier, .signingID:
-            eventQueue.async(flags: .barrier) { self.processMuteRules.insert(mute) }
-            return true
+        case .name, .euid, .teamIdentifier, .signingID:
+            return nil
         }
     }
     
@@ -179,6 +186,15 @@ public class ESClient {
     ///     - mute: The rule to unmute
     ///     - returns: Boolean indicating success or error
     public func unmuteProcess(_ mute: ESMuteProcess) -> Bool {
+        if let result = unmuteNative(mute) {
+            return result
+        } else {
+            eventQueue.async(flags: .barrier) { self.processMuteRules.remove(mute) }
+            return true
+        }
+    }
+    
+    private func unmuteNative(_ mute: ESMuteProcess) -> Bool? {
         switch mute {
         case .token(var token):
             return es_unmute_process(client, &token) == ES_RETURN_SUCCESS
@@ -190,15 +206,13 @@ public class ESClient {
                 return false
             }
         case .path(let path, let type):
-            if #available(macOS 12.0, *), let esPathType = type.esMutePathType {
-                return client.esUnmutePath(path, esPathType) == ES_RETURN_SUCCESS
+            if #available(macOS 12.0, *) {
+                return client.esUnmutePath(path, type.esMutePathType) == ES_RETURN_SUCCESS
             } else {
-                eventQueue.async(flags: .barrier) { self.processMuteRules.remove(mute) }
-                return true
+                return nil
             }
-        case .euid, .teamIdentifier, .signingID:
-            eventQueue.async(flags: .barrier) { self.processMuteRules.remove(mute) }
-            return true
+        case .name, .euid, .teamIdentifier, .signingID:
+            return nil
         }
     }
     

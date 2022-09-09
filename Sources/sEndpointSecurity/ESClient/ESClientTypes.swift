@@ -49,6 +49,7 @@ public enum ESMuteProcess: Hashable, Codable {
     case euid(uid_t)
     
     case path(String, PathType)
+    case name(String, PathType)
     
     //  Codesign Team Identifier (DEVELOPMENT_TEAM in Xcode)
     case teamIdentifier(String)
@@ -57,19 +58,8 @@ public enum ESMuteProcess: Hashable, Codable {
     case signingID(String)
     
     public enum PathType: Hashable, Codable {
-        case name
         case prefix
         case literal
-    }
-}
-
-extension ESMuteProcess.PathType {
-    internal var esMutePathType: es_mute_path_type_t? {
-        switch self {
-        case .prefix: return ES_MUTE_PATH_TYPE_PREFIX
-        case .literal: return ES_MUTE_PATH_TYPE_LITERAL
-        case .name: return nil
-        }
     }
 }
 
@@ -99,18 +89,31 @@ extension ESMuteProcess {
         case .euid(let value):
             return process.auditToken.euid == value
         case .path(let path, let type):
-            switch type {
-            case .name:
-                return process.executable.path.lastPathComponent == path
-            case .prefix:
-                return process.executable.path.hasPrefix(path)
-            case .literal:
-                return process.executable.path == path
-            }
+            return type.match(string: process.executable.path, pattern: path)
+        case .name(let name, let type):
+            return type.match(string: process.name, pattern: name)
         case .teamIdentifier(let value):
             return process.teamID == value
         case .signingID(let value):
             return process.signingID == value
+        }
+    }
+}
+
+extension ESMuteProcess.PathType {
+    internal var esMutePathType: es_mute_path_type_t {
+        switch self {
+        case .prefix: return ES_MUTE_PATH_TYPE_PREFIX
+        case .literal: return ES_MUTE_PATH_TYPE_LITERAL
+        }
+    }
+    
+    internal func match(string: String, pattern: String) -> Bool {
+        switch self {
+        case .prefix:
+            return string.hasPrefix(pattern)
+        case .literal:
+            return string == pattern
         }
     }
 }

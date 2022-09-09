@@ -95,6 +95,10 @@ public struct ESProcess: Equatable, Codable {
     }
 }
 
+extension ESProcess {
+    public var name: String { executable.path.lastPathComponent }
+}
+
 public struct ESFile: Equatable, Codable {
     public var path: String
     public var truncated: Bool
