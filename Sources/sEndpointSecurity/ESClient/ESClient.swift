@@ -48,9 +48,9 @@ public class ESClient {
     /// Handler invoked each time NOTIFY message is coming from EndpointSecurity.
     public var notifyMessageHandler: ((ESMessagePtr) -> Void)?
     
-    /// Queue where all events are processed. Default to concurrent, user-interactive queue.
-    /// May be customized, both serial and concurrent supported.
-    public var eventQueue = DispatchQueue(label: "ESClient.event.queue", qos: .userInteractive, attributes: .concurrent)
+    /// Queue where all events are processed. Default to serial, user-interactive queue.
+    /// May be customized, both serial and concurrent queues are supported.
+    public var eventQueue = DispatchQueue(label: "ESClient.event.queue", qos: .userInteractive)
     
     /// Initialise a new ESClient and connect to the ES subsystem. No-throw version
     /// Subscribe to some set of events
