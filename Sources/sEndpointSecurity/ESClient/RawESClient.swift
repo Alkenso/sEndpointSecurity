@@ -1,6 +1,6 @@
 //  MIT License
 //
-//  Copyright (c) 2021 Alkenso (Vladimir Vashurkin)
+//  Copyright (c) 2022 Alkenso (Vladimir Vashurkin)
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,44 @@
 
 import EndpointSecurity
 
-extension OpaquePointer {
+public protocol ESNativeClient {
+    func esRespond(_ message: UnsafePointer<es_message_t>, flags: UInt32, cache: Bool) -> es_respond_result_t
+    
+    func esSubscribe(_ events: [es_event_type_t]) -> es_return_t
+    func esUnsubscribe(_ events: [es_event_type_t]) -> es_return_t
+    func esUnsubscribeAll() -> es_return_t
+    
+    func esClearCache() -> es_clear_cache_result_t
+    
+    // MARK: Mute by Process
+    
+    func esMuteProcess(_ auditToken: audit_token_t) -> es_return_t
+    func esUnmuteProcess(_ auditToken: audit_token_t) -> es_return_t
+    func esMutedProcesses() -> [audit_token_t]?
+    
+    @available(macOS 12.0, *)
+    func esMuteProcessEvents(_ auditToken: audit_token_t, _ events: [es_event_type_t]) -> es_return_t
+    
+    @available(macOS 12.0, *)
+    func esUnmuteProcessEvents(_ auditToken: audit_token_t, _ events: [es_event_type_t]) -> es_return_t
+    
+    // MARK: Mute by Path
+    
+    func esMutePath(_ path: String, _ type: es_mute_path_type_t) -> es_return_t
+    
+    @available(macOS 12.0, *)
+    func esUnmutePath(_ path: String, _ type: es_mute_path_type_t) -> es_return_t
+    
+    @available(macOS 12.0, *)
+    func esMutePathEvents(_ path: UnsafePointer<CChar>, _ type: es_mute_path_type_t, _ events: [es_event_type_t]) -> es_return_t
+    
+    @available(macOS 12.0, *)
+    func esUnmutePathEvents(_ path: UnsafePointer<CChar>, _ type: es_mute_path_type_t, _ events: [es_event_type_t]) -> es_return_t
+    
+    func esUnmuteAllPaths() -> es_return_t
+}
+
+extension OpaquePointer: ESNativeClient {
     public func esRespond(_ message: UnsafePointer<es_message_t>, flags: UInt32, cache: Bool) -> es_respond_result_t {
         switch message.pointee.event_type {
         // flags requests
@@ -63,7 +100,7 @@ extension OpaquePointer {
         if #available(macOS 12.0, *) {
             var processes: UnsafeMutablePointer<es_muted_processes_t>!
             guard es_muted_processes_events(self, &processes) == ES_RETURN_SUCCESS else { return nil }
-            defer { processes.deallocate() }
+            defer { es_release_muted_processes(processes) }
             return Array(UnsafeBufferPointer(start: processes.pointee.processes, count: processes.pointee.count))
                 .map(\.audit_token)
         } else {
