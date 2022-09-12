@@ -51,10 +51,10 @@ public protocol ESNativeClient {
     func esUnmutePath(_ path: String, _ type: es_mute_path_type_t) -> es_return_t
     
     @available(macOS 12.0, *)
-    func esMutePathEvents(_ path: UnsafePointer<CChar>, _ type: es_mute_path_type_t, _ events: [es_event_type_t]) -> es_return_t
+    func esMutePathEvents(_ path: String, _ type: es_mute_path_type_t, _ events: [es_event_type_t]) -> es_return_t
     
     @available(macOS 12.0, *)
-    func esUnmutePathEvents(_ path: UnsafePointer<CChar>, _ type: es_mute_path_type_t, _ events: [es_event_type_t]) -> es_return_t
+    func esUnmutePathEvents(_ path: String, _ type: es_mute_path_type_t, _ events: [es_event_type_t]) -> es_return_t
     
     func esUnmuteAllPaths() -> es_return_t
 }
@@ -151,14 +151,14 @@ extension OpaquePointer: ESNativeClient {
     }
     
     @available(macOS 12.0, *)
-    public func esMutePathEvents(_ path: UnsafePointer<CChar>, _ type: es_mute_path_type_t, _ events: [es_event_type_t]) -> es_return_t {
+    public func esMutePathEvents(_ path: String, _ type: es_mute_path_type_t, _ events: [es_event_type_t]) -> es_return_t {
         withRawValues(events) {
             es_mute_path_events(self, path, type, $0, $1)
         }
     }
     
     @available(macOS 12.0, *)
-    public func esUnmutePathEvents(_ path: UnsafePointer<CChar>, _ type: es_mute_path_type_t, _ events: [es_event_type_t]) -> es_return_t {
+    public func esUnmutePathEvents(_ path: String, _ type: es_mute_path_type_t, _ events: [es_event_type_t]) -> es_return_t {
         withRawValues(events) {
             es_unmute_path_events(self, path, type, $0, $1)
         }

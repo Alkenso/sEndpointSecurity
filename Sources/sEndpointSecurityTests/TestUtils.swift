@@ -20,6 +20,8 @@
 //  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 //  SOFTWARE.
 
+import sEndpointSecurity
+
 import Foundation
 
 extension stat {
@@ -29,13 +31,12 @@ extension stat {
 }
 
 extension audit_token_t {
-    static func random() throws -> audit_token_t {
-        var data = Data(pod: audit_token_t())
-        data.withUnsafeMutableBytes {
-            guard let ptr = $0.baseAddress else { return }
-            _ = SecRandomCopyBytes(kSecRandomDefault, $0.count, ptr)
+    static func random() -> audit_token_t {
+        var token = audit_token_t()
+        withUnsafeMutablePointer(to: &token) {
+            _ = SecRandomCopyBytes(kSecRandomDefault, MemoryLayout<audit_token_t>.size, $0)
         }
-        return data.pod(exactly: audit_token_t.self)!
+        return token
     }
 }
 
@@ -52,5 +53,40 @@ extension statfs {
             _ = SecRandomCopyBytes(kSecRandomDefault, MemoryLayout<statfs>.size, pointer)
         }
         return value
+    }
+}
+
+extension ESProcess {
+    static func test(_ path: String) -> ESProcess {
+        test(path: path, token: nil)
+    }
+    
+    static func test(_ token: audit_token_t) -> ESProcess {
+        test(path: nil, token: token)
+    }
+    
+    private static func test(path: String?, token: audit_token_t?) -> ESProcess {
+        ESProcess(
+            auditToken: token ?? .random(),
+            ppid: 10,
+            originalPpid: 20,
+            groupID: 30,
+            sessionID: 40,
+            codesigningFlags: 50,
+            isPlatformBinary: true,
+            isESClient: true,
+            cdHash: Data([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]),
+            signingID: "signing_id",
+            teamID: "team_id",
+            executable: ESFile(
+                path: path ?? "/root/path/to/executable/test_process",
+                truncated: false,
+                stat: .init()
+            ),
+            tty: nil,
+            startTime: nil,
+            responsibleAuditToken: nil,
+            parentAuditToken: nil
+        )
     }
 }

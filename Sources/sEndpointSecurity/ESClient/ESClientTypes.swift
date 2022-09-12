@@ -1,6 +1,6 @@
 //  MIT License
 //
-//  Copyright (c) 2021 Alkenso (Vladimir Vashurkin)
+//  Copyright (c) 2022 Alkenso (Vladimir Vashurkin)
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to deal
@@ -22,6 +22,9 @@
 
 import EndpointSecurity
 import Foundation
+import SwiftConvenience
+
+private let log = SCLogger.internalLog(.client)
 
 public struct ESAuthResolution: Equatable, Codable {
     public var result: ESAuthResult
@@ -40,29 +43,6 @@ extension ESAuthResolution {
     public static let denyOnce = ESAuthResolution(result: .auth(false), cache: false)
 }
 
-public enum ESMuteProcess: Hashable, Codable {
-    // - Exact process
-    case token(audit_token_t)
-    case pid(pid_t)
-    
-    // - Patterns
-    case euid(uid_t)
-    
-    case path(String, PathType)
-    case name(String, PathType)
-    
-    //  Codesign Team Identifier (DEVELOPMENT_TEAM in Xcode)
-    case teamIdentifier(String)
-    
-    //  Usually equals to application bundle identifier
-    case signingID(String)
-    
-    public enum PathType: Hashable, Codable {
-        case prefix
-        case literal
-    }
-}
-
 public struct ESClientCreateError: Error, Codable {
     public var status: es_new_client_result_t
 }
@@ -79,41 +59,54 @@ extension ESAuthResolution {
     }
 }
 
-extension ESMuteProcess {
-    func matches(process: ESProcess) -> Bool {
-        switch self {
-        case .token(let value):
-            return process.auditToken == value
-        case .pid(let value):
-            return process.auditToken.pid == value
-        case .euid(let value):
-            return process.auditToken.euid == value
-        case .path(let path, let type):
-            return type.match(string: process.executable.path, pattern: path)
-        case .name(let name, let type):
-            return type.match(string: process.name, pattern: name)
-        case .teamIdentifier(let value):
-            return process.teamID == value
-        case .signingID(let value):
-            return process.signingID == value
-        }
+public struct ESEventSet: Equatable, Codable {
+    public var events: Set<es_event_type_t>
+}
+
+extension ESEventSet {
+    public static let empty = ESEventSet(events: [])
+    public static let all = ESEventSet(events: (0..<ES_EVENT_TYPE_LAST.rawValue).map(es_event_type_t.init(rawValue:)))
+}
+
+extension ESEventSet {
+    public func reverted() -> ESEventSet { ESEventSet(events: ESEventSet.all.events.subtracting(events)) }
+}
+
+extension ESEventSet: ExpressibleByArrayLiteral {
+    public init(arrayLiteral elements: es_event_type_t...) {
+        self.events = Set(elements)
+    }
+    
+    public init(events: [es_event_type_t]) {
+        self.init(events: Set(events))
     }
 }
 
-extension ESMuteProcess.PathType {
-    internal var esMutePathType: es_mute_path_type_t {
-        switch self {
-        case .prefix: return ES_MUTE_PATH_TYPE_PREFIX
-        case .literal: return ES_MUTE_PATH_TYPE_LITERAL
-        }
+public struct ESMuteResolution: Equatable, Codable {
+    public var muteEvents: ESEventSet
+    public var mutePath: Bool
+}
+
+extension ESMuteResolution {
+    /// Do NOT mute process events. Events are NOT muted only for current instance of related process.
+    public static let allowThis = ESMuteResolution(muteEvents: .empty, mutePath: false)
+    
+    /// Do NOT mute process events. Events are NOT muted for all instances of related process.
+    public static let allowAll = ESMuteResolution(muteEvents: .empty, mutePath: true)
+    
+    /// Mute set of events. Events ARE muted only for current instance of related process.
+    public static func muteThis(_ events: ESEventSet) -> ESMuteResolution { .init(muteEvents: events, mutePath: false) }
+    
+    /// Mute set of events. Events ARE muted for all instances of related process.
+    public static func muteAll(_ events: ESEventSet) -> ESMuteResolution { .init(muteEvents: events, mutePath: true) }
+}
+
+extension ESMuteResolution {
+    internal var mutePathEvents: ESEventSet {
+        mutePath ? muteEvents : .empty
     }
     
-    internal func match(string: String, pattern: String) -> Bool {
-        switch self {
-        case .prefix:
-            return string.hasPrefix(pattern)
-        case .literal:
-            return string == pattern
-        }
+    internal var muteProcessEvents: ESEventSet {
+        mutePath ? .empty : muteEvents
     }
 }

@@ -1,6 +1,6 @@
 //  MIT License
 //
-//  Copyright (c) 2021 Alkenso (Vladimir Vashurkin)
+//  Copyright (c) 2022 Alkenso (Vladimir Vashurkin)
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to deal
@@ -30,13 +30,6 @@ private let log = SCLogger.internalLog(.client)
 public class ESClient {
     public var config = Config()
     
-    /// Perform process filtering, additionally to 'mute' rules.
-    /// Should be used for granular process filtering.
-    /// Return `false` if process should be muted and all related messages skipped.
-    /// - Warning: Perfonamce-sensitive handler, called **synchronously** for each process on `eventQueue`.
-    /// Do here as minimum work as possible.
-    public var processFilterHandler: ((ESProcess) -> Bool)?
-    
     /// Handler invoked each time AUTH message is coming from EndpointSecurity.
     /// The message SHOULD be responded using the second parameter - reply block.
     public var authMessageHandler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void) -> Void)?
@@ -49,11 +42,9 @@ public class ESClient {
     public var notifyMessageHandler: ((ESMessagePtr) -> Void)?
     
     /// Queue where `authMessageHandler`, `postAuthMessageHandler` and `notifyMessageHandler` handlers are called.
-    /// Defaults to `nil` which means all handlers are called directly on `eventQueue`.
-    public var queue: DispatchQueue?
-    
-    /// Queue where all events are processed. Serial, user-interactive queue.
-    public let eventQueue = DispatchQueue(label: "ESClient.event.queue", qos: .userInteractive)
+    /// Defaults to serial, user-interactive queue.
+    /// `nil` means all handlers are called directly on native es_client queue.
+    public var queue: DispatchQueue? = DispatchQueue(label: "ESClient.queue", qos: .userInteractive)
     
     /// Initialise a new ESClient and connect to the ES subsystem. No-throw version
     /// Subscribe to some set of events
@@ -79,10 +70,12 @@ public class ESClient {
             self.timebaseInfo = nil
         }
         
-        let status = es_new_client(&client) { [weak self] innerClient, rawMessage in
-            if let self = self {
+        var client: OpaquePointer!
+        weak var weakSelf: ESClient?
+        let status = es_new_client(&client) { innerClient, rawMessage in
+            if let self = weakSelf {
                 let message = ESMessagePtr(message: rawMessage)
-                self.eventQueue.async { self.handleMessage(message) }
+                self.handleMessage(message)
             } else {
                 _ = innerClient.esRespond(rawMessage, flags: .max, cache: false)
             }
@@ -91,11 +84,19 @@ public class ESClient {
         guard status == ES_NEW_CLIENT_RESULT_SUCCESS else {
             throw ESClientCreateError(status: status)
         }
+        
+        self.client = client
+        self.mutePath = ESMutePath(client: client)
+        self.muteProcess = ESMuteProcess(client: client)
+        
+        weakSelf = self
     }
     
     deinit {
         if let client = client {
-            _ = client.esUnsubscribeAll()
+            if client.esUnsubscribeAll() != ES_RETURN_SUCCESS {
+                log.warning("Failed to unsubscribeAll on ESClient.deinit")
+            }
             es_delete_client(client)
         }
     }
@@ -133,107 +134,88 @@ public class ESClient {
         client.esClearCache()
     }
     
-    /// Clear muted processes (mute rules are not changed).
-    /// All processes muted by 'processFilterHandler' or 'muteProcess' rules will be re-evaluated.
-    public func clearMutedProcesses() {
-        eventQueue.async { [self] in
-            mutedProcessesCache.removeAll()
-            
-            guard let muted = client.esMutedProcesses() else {
-                log.error("Failed to get muted processes")
-                return
-            }
-            muted.forEach {
-                if client.esUnmuteProcess($0) != ES_RETURN_SUCCESS {
-                    log.error("Failed to unmute process with pid = \($0.pid)")
-                }
-            }
-        }
+    // MARK: Mute
+    
+    /// Perform process filtering, additionally to mute path and process rules.
+    /// Designed to be used for granular process filtering.
+    ///
+    /// The process may be muted and all related messages skipped accoding to returned `ESMuteResolution`.
+    /// More information on `ESMuteResolution` see in related documentation.
+    ///
+    /// The final decision if the particular event is muted or not relies on multiple mute sources.
+    /// If at least one of above matches the message's `event_type`, the message is muted.
+    /// Sources considered:
+    /// - `mutePath` rules
+    /// - `muteProcess` rules
+    /// - `processMuteHandler` resolution
+    ///
+    /// - Note: Mute resolutions are cached to avoid often handler calls.
+    /// To reset cache, call `clearProcessMuteHandlerCache`.
+    ///
+    /// - Warning: Perfonamce-sensitive handler, called **synchronously** for each process on `eventQueue`.
+    /// Do here as minimum work as possible.
+    public var processMuteHandler: ((ESProcess) -> ESMuteResolution)?
+    
+    /// Clears the cache related to process muting.
+    /// All processes will be re-evaluated against mute rules and `processMuteHandler`.
+    public func clearProcessMuteHandlerCache() {
+        mutePath.clearAdditionalMutes()
+        muteProcess.clearAdditionalMutes()
     }
     
-    /// Suppress all events from the process described by the given `mute` rule
+    /// Suppress events from the process described by the given `mute` rule.
     /// - Parameters:
-    ///     - mute: The rule to mute processes that match it
-    ///     - returns: Boolean indicating success or error
-    public func muteProcess(_ mute: ESMuteProcess) -> Bool {
-        if let result = muteNative(mute) {
-            return result
-        } else {
-            eventQueue.async { self.processMuteRules.insert(mute) }
-            return true
-        }
+    ///     - mute: process to mute.
+    ///     - events: set of events to mute.
+    public func muteProcess(_ mute: ESMuteProcessRule, events: ESEventSet) {
+        guard let token = mute.token else { return }
+        muteProcess.mute(token, events: events)
     }
     
-    private func muteNative(_ mute: ESMuteProcess) -> Bool? {
-        switch mute {
-        case .token(var token):
-            return es_mute_process(client, &token) == ES_RETURN_SUCCESS
-        case .pid(let pid):
-            do {
-                var token = try audit_token_t(pid: pid)
-                return es_mute_process(client, &token) == ES_RETURN_SUCCESS
-            } catch {
-                return false
-            }
-        case .path(let path, let type):
-            if #available(macOS 12.0, *) {
-                return client.esMutePath(path, type.esMutePathType) == ES_RETURN_SUCCESS
-            } else {
-                return nil
-            }
-        case .name, .euid, .teamIdentifier, .signingID:
-            return nil
-        }
-    }
-    
-    /// Unmute a process for all event types
+    /// Unmute events for the process described by the given `mute` rule.
     /// - Parameters:
-    ///     - mute: The rule to unmute
-    ///     - returns: Boolean indicating success or error
-    public func unmuteProcess(_ mute: ESMuteProcess) -> Bool {
-        if let result = unmuteNative(mute) {
-            return result
-        } else {
-            eventQueue.async { self.processMuteRules.remove(mute) }
-            return true
-        }
+    ///     - mute: process to unmute.
+    ///     - events: set of events to mute.
+    public func unmuteProcess(_ mute: ESMuteProcessRule, events: ESEventSet) {
+        guard let token = mute.token else { return }
+        muteProcess.unmute(token, events: events)
     }
     
-    private func unmuteNative(_ mute: ESMuteProcess) -> Bool? {
-        switch mute {
-        case .token(var token):
-            return es_unmute_process(client, &token) == ES_RETURN_SUCCESS
-        case .pid(let pid):
-            do {
-                var token = try audit_token_t(pid: pid)
-                return es_unmute_process(client, &token) == ES_RETURN_SUCCESS
-            } catch {
-                return false
-            }
-        case .path(let path, let type):
-            if #available(macOS 12.0, *) {
-                return client.esUnmutePath(path, type.esMutePathType) == ES_RETURN_SUCCESS
-            } else {
-                return nil
-            }
-        case .name, .euid, .teamIdentifier, .signingID:
-            return nil
-        }
+    /// Unmute all events for all processes. Clear the rules.
+    public func unmuteAllProcesses() {
+        muteProcess.unmuteAll()
+    }
+    
+    /// Suppress events for the process at path. Path is described by the `mute` rule.
+    /// - Parameters:
+    ///     - mute: process path to mute.
+    ///     - events: set of events to mute.
+    public func mutePath(_ mute: ESMutePathRule, events: ESEventSet) {
+        mutePath.mute(mute, events: events)
+    }
+    
+    /// Unmute events for the process at path. Path is described by the `mute` rule.
+    /// - Parameters:
+    ///     - mute: process path to unmute.
+    ///     - events: set of events to unmute.
+    public func unmutePath(_ mute: ESMutePathRule, events: ESEventSet) {
+        mutePath.unmute(mute, events: events)
+    }
+    
+    /// Unmute all events for all process paths. Clear the rules.
+    public func unmuteAllPaths() {
+        mutePath.unmuteAll()
     }
     
     // MARK: Private
-
+    
     private var client: OpaquePointer!
     private let timebaseInfo: mach_timebase_info?
-    private var processMuteRules: Set<ESMuteProcess> = []
-    private var mutedProcessesCache: [ExecutableID: Bool] = [:]
+    private let mutePath: ESMutePath
+    private let muteProcess: ESMuteProcess
     
     private func handleMessage(_ message: ESMessagePtr) {
         let isMuted = checkMuted(message)
-        if isMuted {
-            _ = client.esMuteProcess(message.process.pointee.audit_token)
-        }
-        
         switch message.action_type {
         case ES_ACTION_TYPE_AUTH:
             guard let authMessageHandler = authMessageHandler, !isMuted else {
@@ -254,24 +236,32 @@ public class ESClient {
             guard !isMuted else { return }
             queue.async { self.notifyMessageHandler?(message) }
         default:
-            log.warning("Unknown es_action type = \(message.action_type)")
+            log.warning("Unknown es_action_type = \(message.action_type)")
         }
     }
     
     private func checkMuted(_ message: ESMessagePtr) -> Bool {
-        let process = ESConverter(version: message.version).esProcess(message.process)
-        let processID = ExecutableID(path: process.executable.path, cdHash: process.cdHash)
-        if let isMuted = mutedProcessesCache[processID] {
-            return isMuted
+        let converter = ESConverter(version: message.version)
+        let path = converter.esString(message.process.pointee.executable.pointee.path)
+        let token = message.process.pointee.audit_token
+        let event = message.event_type
+        
+        if let isMutedByPath = mutePath.checkMutedByCache(path, event: event),
+           let isMutedByProcess = muteProcess.checkMutedByCache(token, event: event) {
+            return isMutedByPath || isMutedByProcess
         }
         
-        var isMuted = false
-        isMuted = isMuted || processFilterHandler?(process) == false
-        isMuted = isMuted || processMuteRules.contains { $0.matches(process: process) }
+        let process = converter.esProcess(message.process)
+        let filterResolution = processMuteHandler?(process)
         
-        mutedProcessesCache[processID] = isMuted
+        let isMutedByPath = mutePath.checkMuted(
+            process, event: message.event_type, additionalyMuted: filterResolution?.mutePathEvents ?? .empty
+        )
+        let isMutedByProcess = muteProcess.checkMuted(
+            process, event: message.event_type, additionalyMuted: filterResolution?.muteProcessEvents ?? .empty
+        )
         
-        return isMuted
+        return isMutedByPath || isMutedByProcess
     }
     
     private func respond(_ message: ESMessagePtr, resolution: ESAuthResolution, reason: ResponseReason, timeoutItem: DispatchWorkItem? = nil) {

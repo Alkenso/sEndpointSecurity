@@ -74,7 +74,7 @@ class ESMessageSerializationTests: XCTestCase {
         let rawExecutableFile = rawESFile(Bundle.main.bundleURL.path, truncated: true, stat: testFileStat1)
         let rawTTYFile = rawESFile("/path/to/tty/file", truncated: true, stat: testFileStat1)
         let rawProcess = UnsafeMutablePointer<es_process_t>.allocate(capacity: 1)
-        try rawProcess.initialize(
+        rawProcess.initialize(
             to: es_process_t(
                 audit_token: .random(),
                 ppid: 10,
@@ -260,7 +260,7 @@ class ESMessageSerializationTests: XCTestCase {
         rawInitial.pointee.mach_time = 100
         rawInitial.pointee.deadline = 200
         rawInitial.pointee.process = .allocate(capacity: 1)
-        try rawInitial.pointee.process.initialize(
+        rawInitial.pointee.process.initialize(
             to: es_process_t(
                 audit_token: .random(),
                 ppid: 10,

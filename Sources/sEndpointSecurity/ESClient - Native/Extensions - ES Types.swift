@@ -395,5 +395,95 @@ extension es_clear_cache_result_t: CustomDebugStringConvertible {
 }
 
 extension es_proc_check_type_t: Hashable, Codable {}
+
+extension es_proc_check_type_t: CustomDebugStringConvertible {
+    public var debugDescription: String {
+        "\(name) (\(rawValue))"
+    }
+    
+    private var name: String {
+        switch self {
+        case ES_PROC_CHECK_TYPE_LISTPIDS:
+            return "ES_PROC_CHECK_TYPE_LISTPIDS"
+        case ES_PROC_CHECK_TYPE_PIDINFO:
+            return "ES_PROC_CHECK_TYPE_PIDINFO"
+        case ES_PROC_CHECK_TYPE_PIDFDINFO:
+            return "ES_PROC_CHECK_TYPE_PIDFDINFO"
+        case ES_PROC_CHECK_TYPE_KERNMSGBUF:
+            return "ES_PROC_CHECK_TYPE_KERNMSGBUF"
+        case ES_PROC_CHECK_TYPE_SETCONTROL:
+            return "ES_PROC_CHECK_TYPE_SETCONTROL"
+        case ES_PROC_CHECK_TYPE_PIDFILEPORTINFO:
+            return "ES_PROC_CHECK_TYPE_PIDFILEPORTINFO"
+        case ES_PROC_CHECK_TYPE_TERMINATE:
+            return "ES_PROC_CHECK_TYPE_TERMINATE"
+        case ES_PROC_CHECK_TYPE_DIRTYCONTROL:
+            return "ES_PROC_CHECK_TYPE_DIRTYCONTROL"
+        case ES_PROC_CHECK_TYPE_PIDRUSAGE:
+            return "ES_PROC_CHECK_TYPE_PIDRUSAGE"
+        case ES_PROC_CHECK_TYPE_UDATA_INFO:
+            return "ES_PROC_CHECK_TYPE_UDATA_INFO"
+        default:
+            return "unknown es_proc_check_type_t"
+        }
+    }
+}
+
 extension es_proc_suspend_resume_type_t: Hashable, Codable {}
+
+extension es_proc_suspend_resume_type_t: CustomDebugStringConvertible {
+    public var debugDescription: String {
+        "\(name) (\(rawValue))"
+    }
+    
+    private var name: String {
+        switch self {
+        case ES_PROC_SUSPEND_RESUME_TYPE_SUSPEND:
+            return "ES_PROC_SUSPEND_RESUME_TYPE_SUSPEND"
+        case ES_PROC_SUSPEND_RESUME_TYPE_RESUME:
+            return "ES_PROC_SUSPEND_RESUME_TYPE_RESUME"
+        case ES_PROC_SUSPEND_RESUME_TYPE_SHUTDOWN_SOCKETS:
+            return "ES_PROC_SUSPEND_RESUME_TYPE_SHUTDOWN_SOCKETS"
+        default:
+            return "unknown es_proc_check_type_t"
+        }
+    }
+}
+
 extension es_set_or_clear_t: Hashable, Codable {}
+
+extension es_set_or_clear_t: CustomDebugStringConvertible {
+    public var debugDescription: String {
+        "\(name) (\(rawValue))"
+    }
+    
+    private var name: String {
+        switch self {
+        case ES_SET:
+            return "ES_SET"
+        case ES_CLEAR:
+            return "ES_CLEAR"
+        default:
+            return "unknown es_set_or_clear_t"
+        }
+    }
+}
+
+extension es_mute_path_type_t: Hashable, Codable {}
+
+extension es_mute_path_type_t: CustomDebugStringConvertible {
+    public var debugDescription: String {
+        "\(name) (\(rawValue))"
+    }
+    
+    private var name: String {
+        switch self {
+        case ES_MUTE_PATH_TYPE_PREFIX:
+            return "ES_MUTE_PATH_TYPE_PREFIX"
+        case ES_MUTE_PATH_TYPE_LITERAL:
+            return "ES_MUTE_PATH_TYPE_LITERAL"
+        default:
+            return "unknown es_mute_path_type_t"
+        }
+    }
+}
