@@ -15,11 +15,11 @@ class Main {
     var client: ESClient!
     func start() throws {
         client = try ESClient()
-        _ = try client.muteProcess(.token(.current()))
+        _ = try client.muteProcess(.token(.current()), events: .all)
         
-        client.processFilterHandler = {
-            // Filter out messages from 'mdworker_shared'
-            !$0.executable.path.contains("mdworker_shared")
+        client.processMuteHandler = {
+            // Mute out messages from 'mdworker_shared'
+            $0.executable.path.contains("mdworker_shared") ? .muteAll(.all) : .allowAll
         }
         
         client.authMessageHandler = { raw, callback in
