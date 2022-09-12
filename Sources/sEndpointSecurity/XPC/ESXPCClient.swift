@@ -93,23 +93,29 @@ public class ESXPCClient {
     public func clearCache(completion: @escaping (Result<es_clear_cache_result_t, Error>) -> Void) {
         remoteObjectProxy(completion)?.clearCache { completion(.success($0)) }
     }
-
-    public func muteProcess(_ mute: ESMuteProcess, completion: @escaping (Result<Bool, Error>) -> Void) {
-        guard let proxy = remoteObjectProxy(completion),
-              let data = xpcEncode(mute, completion)
-        else {
-            return
+    
+    public func muteProcess(_ mute: ESMuteProcessRule, events: ESEventSet, completion: @escaping (Error?) -> Void) {
+        withEncodedMute(mute, events: events, actionName: "mute process", reply: completion) { client, mute, events in
+            client.muteProcess(mute, events: events, reply: completion)
         }
-        proxy.muteProcess(data) { completion(.success($0)) }
     }
-
-    public func unmuteProcess(_ mute: ESMuteProcess, completion: @escaping (Result<Bool, Error>) -> Void) {
-        guard let proxy = remoteObjectProxy(completion),
-              let data = xpcEncode(mute, completion)
-        else {
-            return
+    
+    public func unmuteProcess(_ mute: ESMuteProcessRule, events: ESEventSet, completion: @escaping (Error?) -> Void) {
+        withEncodedMute(mute, events: events, actionName: "unmute process", reply: completion) { client, mute, events in
+            client.unmuteProcess(mute, events: events, reply: completion)
         }
-        proxy.unmuteProcess(data) { completion(.success($0)) }
+    }
+    
+    public func mutePath(_ mute: ESMutePathRule, events: ESEventSet, completion: @escaping (Error?) -> Void) {
+        withEncodedMute(mute, events: events, actionName: "mute path", reply: completion) { client, mute, events in
+            client.mutePath(mute, events: events, reply: completion)
+        }
+    }
+    
+    public func unmutePath(_ mute: ESMutePathRule, events: ESEventSet, completion: @escaping (Error?) -> Void) {
+        withEncodedMute(mute, events: events, actionName: "unmute path", reply: completion) { client, mute, events in
+            client.unmutePath(mute, events: events, reply: completion)
+        }
     }
 
     public func custom(_ custom: ESXPCCustomMessage, completion: @escaping (Error?) -> Void) {
@@ -118,22 +124,31 @@ public class ESXPCClient {
             completion(nil)
         }
     }
-
+    
     private func remoteObjectProxy<T>(_ errorHandler: @escaping (Result<T, Error>) -> Void) -> ESClientXPCProtocol? {
         _connection.remoteObjectProxy { errorHandler(.failure($0)) }
+    }
+    
+    private func remoteObjectProxy(_ errorHandler: @escaping (Error?) -> Void) -> ESClientXPCProtocol? {
+        _connection.remoteObjectProxy { errorHandler($0) }
     }
 
     private func xpcEvents(_ events: [es_event_type_t]) -> [NSNumber] {
         events.map(\.rawValue).map(NSNumber.init)
     }
-
-    private func xpcEncode<T: Encodable, R>(_ value: T, _ completion: @escaping (Result<R, Error>) -> Void) -> Data? {
+    
+    private func withEncodedMute<Mute: Encodable>(
+        _ mute: Mute, events: ESEventSet,
+        actionName: String, reply: @escaping (Error?) -> Void,
+        body: @escaping (ESClientXPCProtocol, _ mute: Data, _ events: Data) -> Void
+    ) {
+        guard let proxy = remoteObjectProxy(reply) else { return }
         do {
-            return try JSONEncoder().encode(value)
+            let encodedMute = try xpcEncoder.encode(mute)
+            let encodedEvents = try xpcEncoder.encode(events)
+            body(proxy, encodedMute, encodedEvents)
         } catch {
-            completion(.failure(error))
-            log.error("Failed to encode \(T.self): \(error)")
-            return nil
+            reply(error)
         }
     }
 }

@@ -24,7 +24,9 @@ import EndpointSecurity
 import Foundation
 
 typealias ESMessagePtrXPC = Data
-typealias ESMuteProcessXPC = Data
+typealias ESEventSetXPC = Data
+typealias ESMuteProcessRuleXPC = Data
+typealias ESMutePathRuleXPC = Data
 
 @objc(ESClientXPCProtocol)
 protocol ESClientXPCProtocol {
@@ -34,8 +36,10 @@ protocol ESClientXPCProtocol {
     func unsubscribe(_ events: [NSNumber], reply: @escaping (Bool) -> Void)
     func unsubscribeAll(reply: @escaping (Bool) -> Void)
     func clearCache(reply: @escaping (es_clear_cache_result_t) -> Void)
-    func muteProcess(_ mute: ESMuteProcessXPC, reply: @escaping (Bool) -> Void)
-    func unmuteProcess(_ mute: ESMuteProcessXPC, reply: @escaping (Bool) -> Void)
+    func muteProcess(_ mute: ESMuteProcessRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void)
+    func unmuteProcess(_ mute: ESMuteProcessRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void)
+    func mutePath(_ mute: ESMutePathRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void)
+    func unmutePath(_ mute: ESMutePathRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void)
     
     func custom(id: UUID, payload: Data, isReply: Bool, reply: @escaping () -> Void)
 }
@@ -59,3 +63,6 @@ extension NSXPCInterface {
         return interface
     }
 }
+
+internal let xpcEncoder = JSONEncoder()
+internal let xpcDecoder = JSONDecoder()

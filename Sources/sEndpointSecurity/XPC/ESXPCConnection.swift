@@ -71,7 +71,7 @@ class ESXPCConnection {
             errorHandler($0)
         }
         guard let proxy = remoteObject as? ESClientXPCProtocol else {
-            let error = CommonError.unexpected("Failed cast \(remoteObject) to \(ESClientXPCProtocol.self)")
+            let error = CommonError.cast(remoteObject, to: ESClientXPCProtocol.self)
             errorHandler(error)
             return nil
         }

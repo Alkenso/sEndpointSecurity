@@ -168,17 +168,39 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
         }
     }
 
-    func muteProcess(_ mute: ESMuteProcessXPC, reply: @escaping (Bool) -> Void) {
-        DispatchQueue.global().async {
-            guard let decoded = self.decodeMute(mute) else { return reply(false) }
-            reply(self._client?.muteProcess(decoded) ?? false)
+    func muteProcess(_ mute: ESMuteProcessRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void) {
+        withDecodedMute(
+            from: mute, type: ESMuteProcessRule.self, events: events,
+            actionName: "mute process", reply: reply
+        ) { client, mute, events in
+            client.muteProcess(mute, events: events)
         }
     }
 
-    func unmuteProcess(_ mute: ESMuteProcessXPC, reply: @escaping (Bool) -> Void) {
-        DispatchQueue.global().async {
-            guard let decoded = self.decodeMute(mute) else { return reply(false) }
-            reply(self._client?.unmuteProcess(decoded) ?? false)
+    func unmuteProcess(_ mute: ESMuteProcessRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void) {
+        withDecodedMute(
+            from: mute, type: ESMuteProcessRule.self, events: events,
+            actionName: "unmute process", reply: reply
+        ) { client, mute, events in
+            client.unmuteProcess(mute, events: events)
+        }
+    }
+    
+    func mutePath(_ mute: ESMutePathRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void) {
+        withDecodedMute(
+            from: mute, type: ESMutePathRule.self, events: events,
+            actionName: "mute path", reply: reply
+        ) { client, mute, events in
+            client.mutePath(mute, events: events)
+        }
+    }
+    
+    func unmutePath(_ mute: ESMutePathRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void) {
+        withDecodedMute(
+            from: mute, type: ESMutePathRule.self, events: events,
+            actionName: "unmute path", reply: reply
+        ) { client, mute, events in
+            client.unmutePath(mute, events: events)
         }
     }
 
@@ -251,9 +273,28 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
             }
         }
     }
-
-    private func decodeMute(_ mute: ESMuteProcessXPC) -> ESMuteProcess? {
-        ESMuteProcess(from: mute, decoder: .json(), log: log)
+    
+    private func withDecodedMute<Mute: Decodable>(
+        from data: Data, type: Mute.Type, events: ESEventSetXPC,
+        actionName: String, reply: @escaping (Error?) -> Void,
+        body: @escaping (ESClient, Mute, ESEventSet) -> Void
+    ) {
+        DispatchQueue.global().async { [self] in
+            do {
+                let decodedMute = try xpcDecoder.decode(Mute.self, from: data)
+                let decodedEvents = try xpcDecoder.decode(ESEventSet.self, from: events)
+                let client = try _client.get(name: "ESClient")
+                body(client, decodedMute, decodedEvents)
+                reply(nil)
+            } catch {
+                log.error("Failed to \(actionName). Error: \(error)")
+                reply(error.xpcCompatible())
+            }
+        }
+    }
+    
+    private func decodeMute(_ mute: ESMuteProcessRuleXPC) -> ESMuteProcessRule? {
+        ESMuteProcessRule(from: mute, decoder: .json(), log: log)
     }
     
     private static func authenticate(
