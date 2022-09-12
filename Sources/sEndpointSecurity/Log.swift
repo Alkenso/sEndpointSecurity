@@ -31,7 +31,7 @@ public enum sEndpointSecurityLogSubsystem: String, SCLogSubsystem {
 
 extension sEndpointSecurityLogSubsystem: CustomStringConvertible {
     public var description: String {
-        "sEndpointSecurity.\(self)"
+        "sEndpointSecurity.\(rawValue)"
     }
 }
 
