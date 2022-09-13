@@ -30,6 +30,8 @@ class ESXPCConnection {
     typealias ConnectResult = Result<es_new_client_result_t, Error>
     var connectionStateHandler: ((ConnectResult) -> Void)?
     
+    var converterConfig: ESConverter.Config = .default
+    
     init(delegate: ESClientXPCDelegateProtocol, createConnection: @escaping () -> NSXPCConnection) {
         self._delegate = delegate
         
@@ -48,6 +50,14 @@ class ESXPCConnection {
     }
     
     func connect(async: Bool, notify: ((ConnectResult) -> Void)?) {
+        let encodedConfig: Data
+        do {
+            encodedConfig = try xpcEncoder.encode(converterConfig)
+        } catch {
+            handleConnect(.failure(error), notify: notify)
+            return
+        }
+        
         let connection = _createConnection()
         connection.exportedObject = _delegate
         connection.resume()
@@ -61,7 +71,7 @@ class ESXPCConnection {
             return
         }
         
-        proxy.create { [weak self] in
+        proxy.create(converterConfig: encodedConfig) { [weak self] in
             self?.handleConnect(.success(($0, connection)), notify: notify)
         }
     }

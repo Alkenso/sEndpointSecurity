@@ -27,11 +27,13 @@ import SwiftConvenience
 private let log = SCLogger.internalLog(.xpcClient)
 
 public class ESXPCClient {
-    public var authMessageHandler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void) -> Void)?
-    public var notifyMessageHandler: ((ESMessagePtr) -> Void)?
+    public var authMessageHandler: ((ESMessage, @escaping (ESAuthResolution) -> Void) -> Void)?
+    public var notifyMessageHandler: ((ESMessage) -> Void)?
     public var customMessageHandler: ((ESXPCCustomMessage) -> Void)?
 
     public var connectionStateHandler: ((Result<es_new_client_result_t, Error>) -> Void)?
+    
+    public var converterConfig: ESConverter.Config = .default
 
     @Atomic private var _connection: ESXPCConnection
     private let _delegate: ESClientXPCDelegate
@@ -72,6 +74,7 @@ public class ESXPCClient {
         _delegate.customMessageHandler = customMessageHandler
 
         _connection.connectionStateHandler = connectionStateHandler
+        _connection.converterConfig = converterConfig
 
         _connection.connect(async: async, notify: completion)
     }
@@ -176,15 +179,15 @@ extension ESXPCCustomMessage {
 }
 
 private class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
-    var authMessageHandler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void) -> Void)?
-    var notifyMessageHandler: ((ESMessagePtr) -> Void)?
+    var authMessageHandler: ((ESMessage, @escaping (ESAuthResolution) -> Void) -> Void)?
+    var notifyMessageHandler: ((ESMessage) -> Void)?
     var customMessageHandler: ((ESXPCCustomMessage) -> Void)?
 
     var errorLogHandler: ((Error) -> Void)?
     
     private static let fallback = ESAuthResolution.allowOnce
 
-    func handleAuth(_ message: ESMessagePtrXPC, reply: @escaping (UInt32, Bool) -> Void) {
+    func handleAuth(_ message: ESMessageXPC, reply: @escaping (UInt32, Bool) -> Void) {
         do {
             guard let authMessageHandler = authMessageHandler else {
                 reply(Self.fallback.result.rawValue, Self.fallback.cache)
@@ -192,7 +195,7 @@ private class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
                 return
             }
             
-            let decoded = try ESMessagePtr(data: message)
+            let decoded = try xpcDecoder.decode(ESMessage.self, from: message)
             authMessageHandler(decoded) {
                 reply($0.result.rawValue, $0.cache)
             }
@@ -202,14 +205,14 @@ private class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
         }
     }
 
-    func handleNotify(_ message: ESMessagePtrXPC) {
+    func handleNotify(_ message: ESMessageXPC) {
         do {
             guard let notifyMessageHandler = notifyMessageHandler else {
                 log.warning("Notify message came but no notifyMessageHandler installed")
                 return
             }
             
-            let decoded = try ESMessagePtr(data: message)
+            let decoded = try xpcDecoder.decode(ESMessage.self, from: message)
             notifyMessageHandler(decoded)
         } catch {
             log.error("Failed to decode ESMessagePtr from notify event data. Error: \(error)")

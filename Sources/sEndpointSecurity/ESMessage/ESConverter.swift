@@ -1,6 +1,6 @@
 //  MIT License
 //
-//  Copyright (c) 2021 Alkenso (Vladimir Vashurkin)
+//  Copyright (c) 2022 Alkenso (Vladimir Vashurkin)
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to deal
@@ -26,16 +26,35 @@ import SwiftConvenience
 
 public struct ESConverter {
     public var version: UInt32
+    public var config: Config
     
-    public init(version: UInt32) {
+    public init(version: UInt32, config: Config = .default) {
         self.version = version
+        self.config = config
     }
 }
 
+extension ESConverter {
+    public struct Config: Equatable, Codable {
+        public var execArgs: Bool
+        public var execEnv: Bool
+        
+        public init(execArgs: Bool, execEnv: Bool) {
+            self.execArgs = execArgs
+            self.execEnv = execEnv
+        }
+    }
+}
+
+extension ESConverter.Config {
+    public static let `default` = Self(execArgs: false, execEnv: false)
+    public static let full = Self(execArgs: true, execEnv: true)
+}
+
 public extension ESConverter {
-    static func esMessage(_ es: es_message_t) throws -> ESMessage {
+    static func esMessage(_ es: es_message_t, config: Config) throws -> ESMessage {
         let version = es.version
-        let converter = ESConverter(version: version)
+        let converter = ESConverter(version: version, config: config)
         return try ESMessage(
             version: es.version,
             time: es.time,
@@ -398,7 +417,12 @@ public extension ESConverter {
             throw CommonError.invalidArgument(arg: "es_destination_type_t", invalidValue: es.destination_type)
         }
         
-        return .init(destination: destination)
+        var acl: acl_t?
+        if version >= 2 { /* field available only if message version >= 2 */
+            acl = es.acl
+        }
+        
+        return .init(destination: destination, acl: acl)
     }
     
     func esEvent(deleteextattr es: es_event_deleteextattr_t) -> ESEvent.DeleteExtAttr {
@@ -414,12 +438,20 @@ public extension ESConverter {
     }
     
     func esEvent(exec es: es_event_exec_t) -> ESEvent.Exec {
-        ESEvent.Exec(
+        var event = ESEvent.Exec(
             target: esProcess(es.target),
             script: version >= 2 ? es.script.flatMap(esFile) : nil, /* field available only if message version >= 2 */
             cwd: version >= 3 ? esFile(es.cwd.pointee) : nil, /* field available only if message version >= 3 */
             lastFD: version >= 4 ? es.last_fd : nil /* field available only if message version >= 4 */
         )
+        if config.execArgs {
+            event.args = es.args
+        }
+        if config.execEnv {
+            event.env = es.env
+        }
+        
+        return event
     }
     
     func esEvent(exit es: es_event_exit_t) -> ESEvent.Exit {
@@ -563,7 +595,11 @@ public extension ESConverter {
     }
     
     func esEvent(setacl es: es_event_setacl_t) -> ESEvent.SetACL {
-        .init(target: esFile(es.target), setOrClear: es.set_or_clear)
+        var acl: acl_t?
+        if es.set_or_clear == ES_SET {
+            acl = es.acl.set
+        }
+        return .init(target: esFile(es.target), setOrClear: es.set_or_clear, acl: acl)
     }
     
     func esEvent(setattrlist es: es_event_setattrlist_t) -> ESEvent.SetAttrList {

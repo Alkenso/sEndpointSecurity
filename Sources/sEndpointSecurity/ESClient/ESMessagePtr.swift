@@ -33,9 +33,9 @@ public class ESMessagePtr {
     }
     
     public let rawMessage: UnsafePointer<es_message_t>
-    private let ownership: Ownership
+    private let shouldFree: Bool
     
-    /// Initializes with message, retaining it and releasing when deallocated.
+    /// Initializes with message from `es_client` handler, retaining it and releasing when deallocated.
     public init(message: UnsafePointer<es_message_t>) {
         if #available(macOS 11.0, *) {
             es_retain_message(message)
@@ -43,55 +43,28 @@ public class ESMessagePtr {
         } else {
             self.rawMessage = UnsafePointer(es_copy_message(message)!)
         }
-        self.ownership = .retained
+        self.shouldFree = true
     }
     
-    /// Initializes with message without copying or retaining it.
-    /// Use ONLY if you are sure that message outlives this instance.
+    /// Initializes with message from `es_client` handler without copying or retaining it.
+    /// Use ONLY if you are sure that message outlives created instance.
     public init(unowned message: UnsafePointer<es_message_t>) {
         self.rawMessage = message
-        self.ownership = .unowned
-    }
-    
-    /// Creates message from data, obtained from 'serialize'.
-    /// Do NOT use instances of messages created by this init with es_xxx API.
-    public init(data: Data) throws {
-        var reader = BinaryReader(data: data)
-        self.rawMessage = UnsafePointer(try UnsafeMutablePointer<es_message_t>.allocate(from: &reader))
-        self.ownership = .allocated
+        self.shouldFree = false
     }
     
     deinit {
-        switch ownership {
-        case .retained:
-            if #available(macOS 11.0, *) {
-                es_release_message(rawMessage)
-            } else {
-                es_free_message(UnsafeMutablePointer(mutating: rawMessage))
-            }
-        case .unowned:
-            break
-        case .allocated:
-            UnsafeMutablePointer(mutating: rawMessage).freeAndDeallocate()
+        guard shouldFree else { return }
+        if #available(macOS 11.0, *) {
+            es_release_message(rawMessage)
+        } else {
+            es_free_message(UnsafeMutablePointer(mutating: rawMessage))
         }
     }
     
-    /// Serializes the message, considering only public-accessignle fields.
-    public func serialized() throws -> Data {
-        let estimatedSize =
-            MemoryLayout<es_message_t>.size +
-            MemoryLayout<es_process_t>.size +
-            MemoryLayout<es_thread_t>.size
-        let destination = DataBinaryWriterOutput(data: Data(capacity: estimatedSize))
-        var writer = BinaryWriter(destination)
-        try rawMessage.pointee.encode(with: &writer)
-        
-        return destination.data
-    }
-    
     /// Converts raw message into ESMessage.
-    public func converted() throws -> ESMessage {
-        try ESConverter.esMessage(rawMessage.pointee)
+    public func converted(_ config: ESConverter.Config = .default) throws -> ESMessage {
+        try ESConverter.esMessage(rawMessage.pointee, config: config)
     }
 }
 

@@ -106,8 +106,10 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
         _sendCustomMessage.notify(message)
     }
     
-    func create(completion: @escaping (es_new_client_result_t) -> Void) {
+    func create(converterConfig: ESConverterConfigXPC, completion: @escaping (es_new_client_result_t) -> Void) {
         do {
+            _converterConfig = try xpcDecoder.decode(ESConverter.Config.self, from: converterConfig)
+            
             let client = try _createClient()
             defer { _client = client }
 
@@ -221,6 +223,7 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
     private let _delegate: ESClientXPCDelegateProtocol
     private var _cancellables: [AnyCancellable] = []
     private var _client: ESClient?
+    private var _converterConfig: ESConverter.Config = .default
 
     private func handleAuthMessage(_ message: ESMessagePtr, completion: @escaping (ESAuthResolution) -> Void) {
         processMessage(
@@ -248,11 +251,11 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
     private func processMessage(
         _ message: ESMessagePtr,
         errorHandler: @escaping (Error) -> Void,
-        actionHandler: @escaping (ESClientXPCDelegateProtocol, ESMessagePtrXPC) -> Void
+        actionHandler: @escaping (ESClientXPCDelegateProtocol, ESMessageXPC) -> Void
     ) {
-        _queue.async {
-            guard let remoteObject = self._delegate as? NSXPCProxyCreating else {
-                let error = CommonError.cast(self._delegate, to: NSXPCProxyCreating.self)
+        _queue.async { [self] in
+            guard let remoteObject = _delegate as? NSXPCProxyCreating else {
+                let error = CommonError.cast(_delegate, to: NSXPCProxyCreating.self)
                 errorHandler(error)
                 return
             }
@@ -266,8 +269,9 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
             }
             
             do {
-                let xpcMessage = try message.serialized()
-                actionHandler(delegateProxy, xpcMessage)
+                let converted = try message.converted(_converterConfig)
+                let encoded = try xpcEncoder.encode(converted)
+                actionHandler(delegateProxy, encoded)
             } catch {
                 errorHandler(error)
             }

@@ -23,14 +23,15 @@
 import EndpointSecurity
 import Foundation
 
-typealias ESMessagePtrXPC = Data
+typealias ESMessageXPC = Data
 typealias ESEventSetXPC = Data
 typealias ESMuteProcessRuleXPC = Data
 typealias ESMutePathRuleXPC = Data
+typealias ESConverterConfigXPC = Data
 
 @objc(ESClientXPCProtocol)
 protocol ESClientXPCProtocol {
-    func create(completion: @escaping (es_new_client_result_t) -> Void)
+    func create(converterConfig: ESConverterConfigXPC, completion: @escaping (es_new_client_result_t) -> Void)
     
     func subscribe(_ events: [NSNumber], reply: @escaping (Bool) -> Void)
     func unsubscribe(_ events: [NSNumber], reply: @escaping (Bool) -> Void)
@@ -46,8 +47,8 @@ protocol ESClientXPCProtocol {
 
 @objc(ESClientXPCDelegateProtocol)
 protocol ESClientXPCDelegateProtocol {
-    func handleAuth(_ message: ESMessagePtrXPC, reply: @escaping (UInt32, Bool) -> Void)
-    func handleNotify(_ message: ESMessagePtrXPC)
+    func handleAuth(_ message: ESMessageXPC, reply: @escaping (UInt32, Bool) -> Void)
+    func handleNotify(_ message: ESMessageXPC)
     
     func custom(id: UUID, payload: Data, isReply: Bool, reply: @escaping () -> Void)
 }

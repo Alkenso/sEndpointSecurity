@@ -44,7 +44,7 @@ class Main {
         }
         
         client.notifyMessageHandler = {
-            let message = try! $0.converted()
+            let message = try! $0.converted(.full)
             
             let process = message.process.executable.path.lastPathComponent
             switch message.event {
