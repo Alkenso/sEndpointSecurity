@@ -279,15 +279,18 @@ public extension ESEvent {
         /// - Note: field available only if message version >= 2
         /// - Note: `acl` is present only in original message.
         /// If structure is re-encoded, this field will be lost.
-        public var acl: acl_t?
+        public var acl: Resource<acl_t>?
         
         public enum Destination: Equatable, Codable {
             case existingFile(ESFile)
             case newPath(dir: ESFile, filename: String, mode: mode_t)
         }
         
-        public init(destination: ESEvent.Create.Destination) {
+        public init(destination: ESEvent.Create.Destination, acl: acl_t?) {
             self.destination = destination
+            if let acl = acl, let dup = acl_dup(acl) {
+                self.acl = .raii(dup) { acl_free(.init($0)) }
+            }
         }
         
         enum CodingKeys: String, CodingKey {
@@ -328,6 +331,9 @@ public extension ESEvent {
         public var script: ESFile? /* field available only if message version >= 2 */
         public var cwd: ESFile? /* field available only if message version >= 3 */
         public var lastFD: Int32? /* field available only if message version >= 4 */
+        
+        public var args: [String]? // present if ESConverter.Config.execArgs == true
+        public var env: [String]? // present if ESConverter.Config.execEnv == true
         
         public init(target: ESProcess, script: ESFile? = nil, cwd: ESFile? = nil, lastFD: Int32? = nil) {
             self.target = target
@@ -650,11 +656,14 @@ public extension ESEvent {
         
         /// - Note: `acl` is present only in original message.
         /// If structure is re-encoded, this field will be lost.
-        public var acl: acl_t?
+        public var acl: Resource<acl_t>?
         
-        public init(target: ESFile, setOrClear: es_set_or_clear_t) {
+        public init(target: ESFile, setOrClear: es_set_or_clear_t, acl: acl_t?) {
             self.target = target
             self.setOrClear = setOrClear
+            if let acl = acl, let dup = acl_dup(acl) {
+                self.acl = .raii(dup) { acl_free(.init($0)) }
+            }
         }
         
         enum CodingKeys: String, CodingKey {
