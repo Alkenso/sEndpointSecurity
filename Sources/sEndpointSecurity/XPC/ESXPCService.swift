@@ -72,6 +72,14 @@ extension ESXPCService: NSXPCListenerDelegate {
         let client = createClient(delegate)
         newConnection.exportedObject = client
         newConnection.resume()
+        newConnection.invalidationHandler = { [weak client, weak newConnection] in
+            client?.unsubscribeAll(reply: { _ in })
+            newConnection?.invalidationHandler = nil
+        }
+        newConnection.interruptionHandler = { [weak newConnection] in
+            newConnection?.interruptionHandler = nil
+            newConnection?.invalidate()
+        }
 
         return true
     }
