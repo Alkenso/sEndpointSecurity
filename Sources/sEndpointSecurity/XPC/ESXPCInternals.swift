@@ -30,7 +30,7 @@ typealias ESMutePathRuleXPC = Data
 typealias ESConverterConfigXPC = Data
 
 @objc(ESClientXPCProtocol)
-protocol ESClientXPCProtocol {
+internal protocol ESClientXPCProtocol {
     func create(converterConfig: ESConverterConfigXPC, completion: @escaping (es_new_client_result_t) -> Void)
     
     func subscribe(_ events: [NSNumber], reply: @escaping (Bool) -> Void)
@@ -48,7 +48,7 @@ protocol ESClientXPCProtocol {
 }
 
 @objc(ESClientXPCDelegateProtocol)
-protocol ESClientXPCDelegateProtocol {
+internal protocol ESClientXPCDelegateProtocol {
     func handleAuth(_ message: ESMessageXPC, reply: @escaping (UInt32, Bool) -> Void)
     func handleNotify(_ message: ESMessageXPC)
     
@@ -56,12 +56,12 @@ protocol ESClientXPCDelegateProtocol {
 }
 
 extension NSXPCInterface {
-    static var esClient: NSXPCInterface {
+    internal static var esClient: NSXPCInterface {
         let interface = NSXPCInterface(with: ESClientXPCProtocol.self)
         return interface
     }
     
-    static var esClientDelegate: NSXPCInterface {
+    internal static var esClientDelegate: NSXPCInterface {
         let interface = NSXPCInterface(with: ESClientXPCDelegateProtocol.self)
         return interface
     }
