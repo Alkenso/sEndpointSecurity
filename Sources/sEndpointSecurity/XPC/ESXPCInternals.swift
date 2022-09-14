@@ -39,8 +39,10 @@ protocol ESClientXPCProtocol {
     func clearCache(reply: @escaping (es_clear_cache_result_t) -> Void)
     func muteProcess(_ mute: ESMuteProcessRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void)
     func unmuteProcess(_ mute: ESMuteProcessRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void)
+    func unmuteAllProcesses(reply: @escaping (Error?) -> Void)
     func mutePath(_ mute: ESMutePathRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void)
     func unmutePath(_ mute: ESMutePathRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void)
+    func unmuteAllPaths(reply: @escaping (Error?) -> Void)
     
     func custom(id: UUID, payload: Data, isReply: Bool, reply: @escaping () -> Void)
 }

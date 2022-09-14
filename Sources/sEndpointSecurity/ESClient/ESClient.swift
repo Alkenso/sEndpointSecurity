@@ -167,7 +167,7 @@ public class ESClient {
     /// - Parameters:
     ///     - mute: process to mute.
     ///     - events: set of events to mute.
-    public func muteProcess(_ mute: ESMuteProcessRule, events: ESEventSet) {
+    public func muteProcess(_ mute: ESMuteProcessRule, events: ESEventSet = .all) {
         guard let token = mute.token else { return }
         muteProcess.mute(token, events: events)
     }
@@ -176,7 +176,7 @@ public class ESClient {
     /// - Parameters:
     ///     - mute: process to unmute.
     ///     - events: set of events to mute.
-    public func unmuteProcess(_ mute: ESMuteProcessRule, events: ESEventSet) {
+    public func unmuteProcess(_ mute: ESMuteProcessRule, events: ESEventSet = .all) {
         guard let token = mute.token else { return }
         muteProcess.unmute(token, events: events)
     }
@@ -190,7 +190,7 @@ public class ESClient {
     /// - Parameters:
     ///     - mute: process path to mute.
     ///     - events: set of events to mute.
-    public func mutePath(_ mute: ESMutePathRule, events: ESEventSet) {
+    public func mutePath(_ mute: ESMutePathRule, events: ESEventSet = .all) {
         mutePath.mute(mute, events: events)
     }
     
@@ -198,7 +198,7 @@ public class ESClient {
     /// - Parameters:
     ///     - mute: process path to unmute.
     ///     - events: set of events to unmute.
-    public func unmutePath(_ mute: ESMutePathRule, events: ESEventSet) {
+    public func unmutePath(_ mute: ESMutePathRule, events: ESEventSet = .all) {
         mutePath.unmute(mute, events: events)
     }
     

@@ -97,28 +97,36 @@ public class ESXPCClient {
         remoteObjectProxy(completion)?.clearCache { completion(.success($0)) }
     }
     
-    public func muteProcess(_ mute: ESMuteProcessRule, events: ESEventSet, completion: @escaping (Error?) -> Void) {
+    public func muteProcess(_ mute: ESMuteProcessRule, events: ESEventSet = .all, completion: @escaping (Error?) -> Void) {
         withEncodedMute(mute, events: events, actionName: "mute process", reply: completion) { client, mute, events in
             client.muteProcess(mute, events: events, reply: completion)
         }
     }
     
-    public func unmuteProcess(_ mute: ESMuteProcessRule, events: ESEventSet, completion: @escaping (Error?) -> Void) {
+    public func unmuteProcess(_ mute: ESMuteProcessRule, events: ESEventSet = .all, completion: @escaping (Error?) -> Void) {
         withEncodedMute(mute, events: events, actionName: "unmute process", reply: completion) { client, mute, events in
             client.unmuteProcess(mute, events: events, reply: completion)
         }
     }
     
-    public func mutePath(_ mute: ESMutePathRule, events: ESEventSet, completion: @escaping (Error?) -> Void) {
+    public func unmuteAllProcesses(completion: @escaping (Error?) -> Void) {
+        remoteObjectProxy(completion)?.unmuteAllProcesses(reply: completion)
+    }
+    
+    public func mutePath(_ mute: ESMutePathRule, events: ESEventSet = .all, completion: @escaping (Error?) -> Void) {
         withEncodedMute(mute, events: events, actionName: "mute path", reply: completion) { client, mute, events in
             client.mutePath(mute, events: events, reply: completion)
         }
     }
     
-    public func unmutePath(_ mute: ESMutePathRule, events: ESEventSet, completion: @escaping (Error?) -> Void) {
+    public func unmutePath(_ mute: ESMutePathRule, events: ESEventSet = .all, completion: @escaping (Error?) -> Void) {
         withEncodedMute(mute, events: events, actionName: "unmute path", reply: completion) { client, mute, events in
             client.unmutePath(mute, events: events, reply: completion)
         }
+    }
+    
+    public func unmuteAllPaths(completion: @escaping (Error?) -> Void) {
+        remoteObjectProxy(completion)?.unmuteAllPaths(reply: completion)
     }
 
     public func custom(_ custom: ESXPCCustomMessage, completion: @escaping (Error?) -> Void) {
