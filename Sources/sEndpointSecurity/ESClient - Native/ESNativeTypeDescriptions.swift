@@ -23,14 +23,18 @@
 import EndpointSecurity
 import Foundation
 
-extension es_event_type_t: Hashable, Codable {}
+private protocol ESNativeType: Hashable, Codable, CustomStringConvertible, RawRepresentable {
+    var name: String? { get }
+}
 
-extension es_event_type_t: CustomDebugStringConvertible {
-    public var debugDescription: String {
-        "\(name) (\(rawValue))"
+extension ESNativeType {
+    public var description: String {
+        "\(name ?? "unknown \(Self.self)") (\(rawValue))"
     }
-    
-    private var name: String {
+}
+
+extension es_event_type_t: ESNativeType {
+    fileprivate var name: String? {
         switch self {
         case ES_EVENT_TYPE_AUTH_EXEC:
             return "ES_EVENT_TYPE_AUTH_EXEC"
@@ -254,77 +258,96 @@ extension es_event_type_t: CustomDebugStringConvertible {
             return "ES_EVENT_TYPE_AUTH_COPYFILE"
         case ES_EVENT_TYPE_NOTIFY_COPYFILE:
             return "ES_EVENT_TYPE_NOTIFY_COPYFILE"
+        case ES_EVENT_TYPE_NOTIFY_AUTHENTICATION:
+            return "ES_EVENT_TYPE_NOTIFY_AUTHENTICATION"
+        case ES_EVENT_TYPE_NOTIFY_XP_MALWARE_DETECTED:
+            return "ES_EVENT_TYPE_NOTIFY_XP_MALWARE_DETECTED"
+        case ES_EVENT_TYPE_NOTIFY_XP_MALWARE_REMEDIATED:
+            return "ES_EVENT_TYPE_NOTIFY_XP_MALWARE_REMEDIATED"
+        case ES_EVENT_TYPE_NOTIFY_LW_SESSION_LOGIN:
+            return "ES_EVENT_TYPE_NOTIFY_LW_SESSION_LOGIN"
+        case ES_EVENT_TYPE_NOTIFY_LW_SESSION_LOGOUT:
+            return "ES_EVENT_TYPE_NOTIFY_LW_SESSION_LOGOUT"
+        case ES_EVENT_TYPE_NOTIFY_LW_SESSION_LOCK:
+            return "ES_EVENT_TYPE_NOTIFY_LW_SESSION_LOCK"
+        case ES_EVENT_TYPE_NOTIFY_LW_SESSION_UNLOCK:
+            return "ES_EVENT_TYPE_NOTIFY_LW_SESSION_UNLOCK"
+        case ES_EVENT_TYPE_NOTIFY_SCREENSHARING_ATTACH:
+            return "ES_EVENT_TYPE_NOTIFY_SCREENSHARING_ATTACH"
+        case ES_EVENT_TYPE_NOTIFY_SCREENSHARING_DETACH:
+            return "ES_EVENT_TYPE_NOTIFY_SCREENSHARING_DETACH"
+        case ES_EVENT_TYPE_NOTIFY_OPENSSH_LOGIN:
+            return "ES_EVENT_TYPE_NOTIFY_OPENSSH_LOGIN"
+        case ES_EVENT_TYPE_NOTIFY_OPENSSH_LOGOUT:
+            return "ES_EVENT_TYPE_NOTIFY_OPENSSH_LOGOUT"
+        case ES_EVENT_TYPE_NOTIFY_LOGIN_LOGIN:
+            return "ES_EVENT_TYPE_NOTIFY_LOGIN_LOGIN"
+        case ES_EVENT_TYPE_NOTIFY_LOGIN_LOGOUT:
+            return "ES_EVENT_TYPE_NOTIFY_LOGIN_LOGOUT"
+        case ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_ADD:
+            return "ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_ADD"
+        case ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_REMOVE:
+            return "ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_REMOVE"
         default:
-            return "unknown es_event_type_t"
+            return nil
         }
     }
 }
 
-extension es_auth_result_t: Hashable, Codable {}
-
-extension es_auth_result_t: CustomDebugStringConvertible {
-    public var debugDescription: String {
-        "\(name) (\(rawValue))"
-    }
-    
-    private var name: String {
+extension es_auth_result_t: ESNativeType {
+    fileprivate var name: String? {
         switch self {
         case ES_AUTH_RESULT_ALLOW:
             return "ES_AUTH_RESULT_ALLOW"
         case ES_AUTH_RESULT_DENY:
             return "ES_AUTH_RESULT_DENY"
         default:
-            return "unknown es_auth_result_t"
+            return nil
         }
     }
 }
 
-extension es_result_type_t: Hashable, Codable {}
-
-extension es_result_type_t: CustomDebugStringConvertible {
-    public var debugDescription: String {
-        "\(name) (\(rawValue))"
+extension es_action_type_t: ESNativeType {
+    fileprivate var name: String? {
+        switch self {
+        case ES_ACTION_TYPE_AUTH:
+            return "ES_ACTION_TYPE_AUTH"
+        case ES_ACTION_TYPE_NOTIFY:
+            return "ES_ACTION_TYPE_NOTIFY"
+        default:
+            return nil
+        }
     }
-    
-    private var name: String {
+}
+
+extension es_result_type_t: ESNativeType {
+    fileprivate var name: String? {
         switch self {
         case ES_RESULT_TYPE_AUTH:
             return "ES_RESULT_TYPE_AUTH"
         case ES_RESULT_TYPE_FLAGS:
             return "ES_RESULT_TYPE_FLAGS"
         default:
-            return "unknown es_result_type_t"
+            return nil
         }
     }
 }
 
-extension es_return_t: Hashable, Codable {}
-
-extension es_return_t: CustomDebugStringConvertible {
-    public var debugDescription: String {
-        "\(name) (\(rawValue))"
-    }
-    
-    private var name: String {
+extension es_return_t: ESNativeType {
+    fileprivate var name: String? {
         switch self {
         case ES_RETURN_SUCCESS:
             return "ES_RETURN_SUCCESS"
         case ES_RETURN_ERROR:
             return "ES_RETURN_ERROR"
         default:
-            return "unknown es_return_t"
+            return nil
         }
     }
 }
 
-extension es_respond_result_t: Hashable, Codable {}
-
-extension es_respond_result_t: CustomDebugStringConvertible {
-    public var debugDescription: String {
-        "\(name) (\(rawValue))"
-    }
-    
-    private var name: String {
+extension es_respond_result_t: ESNativeType {
+    fileprivate var name: String? {
         switch self {
         case ES_RESPOND_RESULT_SUCCESS:
             return "ES_RESPOND_RESULT_SUCCESS"
@@ -339,19 +362,13 @@ extension es_respond_result_t: CustomDebugStringConvertible {
         case ES_RESPOND_RESULT_ERR_EVENT_TYPE:
             return "ES_RESPOND_RESULT_ERR_EVENT_TYPE"
         default:
-            return "unknown es_respond_result_t"
+            return nil
         }
     }
 }
 
-extension es_new_client_result_t: Hashable, Codable {}
-
-extension es_new_client_result_t: CustomDebugStringConvertible {
-    public var debugDescription: String {
-        "\(name) (\(rawValue))"
-    }
-    
-    private var name: String {
+extension es_new_client_result_t: ESNativeType {
+    fileprivate var name: String? {
         switch self {
         case ES_NEW_CLIENT_RESULT_SUCCESS:
             return "ES_NEW_CLIENT_RESULT_SUCCESS"
@@ -368,19 +385,13 @@ extension es_new_client_result_t: CustomDebugStringConvertible {
         case ES_NEW_CLIENT_RESULT_ERR_TOO_MANY_CLIENTS:
             return "ES_NEW_CLIENT_RESULT_ERR_TOO_MANY_CLIENTS"
         default:
-            return "unknown es_new_client_result_t"
+            return nil
         }
     }
 }
 
-extension es_clear_cache_result_t: Hashable, Codable {}
-
-extension es_clear_cache_result_t: CustomDebugStringConvertible {
-    public var debugDescription: String {
-        "\(name) (\(rawValue))"
-    }
-    
-    private var name: String {
+extension es_clear_cache_result_t: ESNativeType {
+    fileprivate var name: String? {
         switch self {
         case ES_CLEAR_CACHE_RESULT_SUCCESS:
             return "ES_CLEAR_CACHE_RESULT_SUCCESS"
@@ -389,19 +400,13 @@ extension es_clear_cache_result_t: CustomDebugStringConvertible {
         case ES_CLEAR_CACHE_RESULT_ERR_THROTTLE:
             return "ES_CLEAR_CACHE_RESULT_ERR_THROTTLE"
         default:
-            return "unknown es_clear_cache_result_t"
+            return nil
         }
     }
 }
 
-extension es_proc_check_type_t: Hashable, Codable {}
-
-extension es_proc_check_type_t: CustomDebugStringConvertible {
-    public var debugDescription: String {
-        "\(name) (\(rawValue))"
-    }
-    
-    private var name: String {
+extension es_proc_check_type_t: ESNativeType {
+    fileprivate var name: String? {
         switch self {
         case ES_PROC_CHECK_TYPE_LISTPIDS:
             return "ES_PROC_CHECK_TYPE_LISTPIDS"
@@ -424,19 +429,13 @@ extension es_proc_check_type_t: CustomDebugStringConvertible {
         case ES_PROC_CHECK_TYPE_UDATA_INFO:
             return "ES_PROC_CHECK_TYPE_UDATA_INFO"
         default:
-            return "unknown es_proc_check_type_t"
+            return nil
         }
     }
 }
 
-extension es_proc_suspend_resume_type_t: Hashable, Codable {}
-
-extension es_proc_suspend_resume_type_t: CustomDebugStringConvertible {
-    public var debugDescription: String {
-        "\(name) (\(rawValue))"
-    }
-    
-    private var name: String {
+extension es_proc_suspend_resume_type_t: ESNativeType {
+    fileprivate var name: String? {
         switch self {
         case ES_PROC_SUSPEND_RESUME_TYPE_SUSPEND:
             return "ES_PROC_SUSPEND_RESUME_TYPE_SUSPEND"
@@ -445,45 +444,160 @@ extension es_proc_suspend_resume_type_t: CustomDebugStringConvertible {
         case ES_PROC_SUSPEND_RESUME_TYPE_SHUTDOWN_SOCKETS:
             return "ES_PROC_SUSPEND_RESUME_TYPE_SHUTDOWN_SOCKETS"
         default:
-            return "unknown es_proc_check_type_t"
+            return nil
         }
     }
 }
 
-extension es_set_or_clear_t: Hashable, Codable {}
-
-extension es_set_or_clear_t: CustomDebugStringConvertible {
-    public var debugDescription: String {
-        "\(name) (\(rawValue))"
-    }
-    
-    private var name: String {
+extension es_set_or_clear_t: ESNativeType {
+    fileprivate var name: String? {
         switch self {
         case ES_SET:
             return "ES_SET"
         case ES_CLEAR:
             return "ES_CLEAR"
         default:
-            return "unknown es_set_or_clear_t"
+            return nil
         }
     }
 }
 
-extension es_mute_path_type_t: Hashable, Codable {}
-
-extension es_mute_path_type_t: CustomDebugStringConvertible {
-    public var debugDescription: String {
-        "\(name) (\(rawValue))"
-    }
-    
-    private var name: String {
+extension es_mute_path_type_t: ESNativeType {
+    fileprivate var name: String? {
         switch self {
         case ES_MUTE_PATH_TYPE_PREFIX:
             return "ES_MUTE_PATH_TYPE_PREFIX"
         case ES_MUTE_PATH_TYPE_LITERAL:
             return "ES_MUTE_PATH_TYPE_LITERAL"
+        case ES_MUTE_PATH_TYPE_TARGET_PREFIX:
+            return "ES_MUTE_PATH_TYPE_TARGET_PREFIX"
+        case ES_MUTE_PATH_TYPE_TARGET_LITERAL:
+            return "ES_MUTE_PATH_TYPE_TARGET_LITERAL"
         default:
-            return "unknown es_mute_path_type_t"
+            return nil
+        }
+    }
+}
+
+extension es_mute_inversion_type_t: ESNativeType {
+    fileprivate var name: String? {
+        switch self {
+        case ES_MUTE_INVERSION_TYPE_PROCESS:
+            return "ES_MUTE_INVERSION_TYPE_PROCESS"
+        case ES_MUTE_INVERSION_TYPE_PATH:
+            return "ES_MUTE_INVERSION_TYPE_PATH"
+        case ES_MUTE_INVERSION_TYPE_TARGET_PATH:
+            return "ES_MUTE_INVERSION_TYPE_TARGET_PATH"
+        case ES_MUTE_INVERSION_TYPE_LAST:
+            return "ES_MUTE_INVERSION_TYPE_LAST"
+        default:
+            return nil
+        }
+    }
+}
+
+extension es_mute_inverted_return_t: ESNativeType {
+    fileprivate var name: String? {
+        switch self {
+        case ES_MUTE_INVERTED:
+            return "ES_MUTE_INVERTED"
+        case ES_MUTE_NOT_INVERTED:
+            return "ES_MUTE_NOT_INVERTED"
+        case ES_MUTE_INVERTED_ERROR:
+            return "ES_MUTE_INVERTED_ERROR"
+        default:
+            return nil
+        }
+    }
+}
+
+extension es_btm_item_type_t: ESNativeType {
+    fileprivate var name: String? {
+        switch self {
+        case ES_BTM_ITEM_TYPE_USER_ITEM:
+            return "ES_BTM_ITEM_TYPE_USER_ITEM"
+        case ES_BTM_ITEM_TYPE_APP:
+            return "ES_BTM_ITEM_TYPE_APP"
+        case ES_BTM_ITEM_TYPE_LOGIN_ITEM:
+            return "ES_BTM_ITEM_TYPE_LOGIN_ITEM"
+        case ES_BTM_ITEM_TYPE_AGENT:
+            return "ES_BTM_ITEM_TYPE_AGENT"
+        case ES_BTM_ITEM_TYPE_DAEMON:
+            return "ES_BTM_ITEM_TYPE_DAEMON"
+        default:
+            return nil
+        }
+    }
+}
+
+extension es_touchid_mode_t: ESNativeType {
+    fileprivate var name: String? {
+        switch self {
+        case ES_TOUCHID_MODE_VERIFICATION:
+            return "ES_TOUCHID_MODE_VERIFICATION"
+        case ES_TOUCHID_MODE_IDENTIFICATION:
+            return "ES_TOUCHID_MODE_IDENTIFICATION"
+        default:
+            return nil
+        }
+    }
+}
+
+extension es_auto_unlock_type_t: ESNativeType {
+    fileprivate var name: String? {
+        switch self {
+        case ES_AUTO_UNLOCK_MACHINE_UNLOCK:
+            return "ES_AUTO_UNLOCK_MACHINE_UNLOCK"
+        case ES_AUTO_UNLOCK_AUTH_PROMPT:
+            return "ES_AUTO_UNLOCK_AUTH_PROMPT"
+        default:
+            return nil
+        }
+    }
+}
+
+extension es_openssh_login_result_type_t: ESNativeType {
+    fileprivate var name: String? {
+        switch self {
+        case ES_OPENSSH_LOGIN_EXCEED_MAXTRIES:
+            return "ES_OPENSSH_LOGIN_EXCEED_MAXTRIES"
+        case ES_OPENSSH_LOGIN_ROOT_DENIED:
+            return "ES_OPENSSH_LOGIN_ROOT_DENIED"
+        case ES_OPENSSH_AUTH_SUCCESS:
+            return "ES_OPENSSH_AUTH_SUCCESS"
+        case ES_OPENSSH_AUTH_FAIL_NONE:
+            return "ES_OPENSSH_AUTH_FAIL_NONE"
+        case ES_OPENSSH_AUTH_FAIL_PASSWD:
+            return "ES_OPENSSH_AUTH_FAIL_PASSWD"
+        case ES_OPENSSH_AUTH_FAIL_KBDINT:
+            return "ES_OPENSSH_AUTH_FAIL_KBDINT"
+        case ES_OPENSSH_AUTH_FAIL_PUBKEY:
+            return "ES_OPENSSH_AUTH_FAIL_PUBKEY"
+        case ES_OPENSSH_AUTH_FAIL_HOSTBASED:
+            return "ES_OPENSSH_AUTH_FAIL_HOSTBASED"
+        case ES_OPENSSH_AUTH_FAIL_GSSAPI:
+            return "ES_OPENSSH_AUTH_FAIL_GSSAPI"
+        case ES_OPENSSH_INVALID_USER:
+            return "ES_OPENSSH_INVALID_USER"
+        default:
+            return nil
+        }
+    }
+}
+
+extension es_address_type_t: ESNativeType {
+    fileprivate var name: String? {
+        switch self {
+        case ES_ADDRESS_TYPE_NONE:
+            return "ES_ADDRESS_TYPE_NONE"
+        case ES_ADDRESS_TYPE_IPV4:
+            return "ES_ADDRESS_TYPE_IPV4"
+        case ES_ADDRESS_TYPE_IPV6:
+            return "ES_ADDRESS_TYPE_IPV6"
+        case ES_ADDRESS_TYPE_NAMED_SOCKET:
+            return "ES_ADDRESS_TYPE_NAMED_SOCKET"
+        default:
+            return nil
         }
     }
 }

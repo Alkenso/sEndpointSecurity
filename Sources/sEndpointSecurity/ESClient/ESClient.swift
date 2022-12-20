@@ -207,6 +207,29 @@ public class ESClient {
         mutePath.unmuteAll()
     }
     
+    /// Unmute all target paths. Works only for macOS 13.0+.
+    public func unmuteAllTargetPaths() {
+        mutePath.unmuteAllTarget()
+    }
+    
+    /// Invert the mute state of a given mute dimension. Works only for macOS 13.0+.
+    public func invertMuting(_ muteType: es_mute_inversion_type_t) -> Bool {
+        guard #available(macOS 13.0, *) else { return false }
+        return client.esInvertMuting(muteType) == ES_RETURN_SUCCESS
+    }
+    
+    /// Mute state of a given mute dimension. Works only for macOS 13.0+.
+    public func mutingInverted(_ muteType: es_mute_inversion_type_t) -> Bool? {
+        guard #available(macOS 13.0, *) else { return false }
+        
+        switch client.esMutingInverted(muteType) {
+        case ES_MUTE_INVERTED: return true
+        case ES_MUTE_NOT_INVERTED: return false
+        case ES_MUTE_INVERTED_ERROR: return nil
+        default: return nil
+        }
+    }
+    
     // MARK: Private
     
     private var client: OpaquePointer!

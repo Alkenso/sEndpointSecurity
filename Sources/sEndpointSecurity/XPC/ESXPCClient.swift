@@ -128,6 +128,26 @@ public class ESXPCClient {
     public func unmuteAllPaths(completion: @escaping (Error?) -> Void) {
         remoteObjectProxy(completion)?.unmuteAllPaths(reply: completion)
     }
+    
+    public func unmuteAllTargetPaths(completion: @escaping (Error?) -> Void) {
+        remoteObjectProxy(completion)?.unmuteAllTargetPaths(reply: completion)
+    }
+    
+    public func invertMuting(_ muteType: es_mute_inversion_type_t, completion: @escaping (Result<Bool, Error>) -> Void) {
+        remoteObjectProxy(completion)?.invertMuting(muteType) { completion(.success($0)) }
+    }
+    
+    public func mutingInverted(_ muteType: es_mute_inversion_type_t, completion: @escaping (Result<Bool?, Error>) -> Void) {
+        remoteObjectProxy(completion)?.mutingInverted(muteType) {
+            if $0 > 0 {
+                completion(.success(true))
+            } else if $0 == 0 {
+                completion(.success(false))
+            } else {
+                completion(.success(nil))
+            }
+        }
+    }
 
     public func custom(_ custom: ESXPCCustomMessage, completion: @escaping (Error?) -> Void) {
         guard let proxy = _connection.remoteObjectProxy(completion) else { return }

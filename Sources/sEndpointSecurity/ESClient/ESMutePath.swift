@@ -39,6 +39,10 @@ public enum ESMutePathRule: Hashable, Codable {
     public enum PathType: Hashable, Codable {
         case prefix
         case literal
+        
+        // Makes sense only for macOS 13.0+.
+        case targetPrefix
+        case targetLiteral
     }
 }
 
@@ -106,8 +110,10 @@ internal class ESMutePath {
         os_unfair_lock_lock(&cacheLock)
         defer { os_unfair_lock_unlock(&cacheLock) }
         
-        muteRules[mute, default: []].events.formUnion(events.events)
         muteNative(mute, events: events)
+        
+        guard !mute.isTargetPath else { return }
+        muteRules[mute, default: []].events.formUnion(events.events)
         
         if useAPIv12 {
             invalidateCache()
@@ -142,6 +148,13 @@ internal class ESMutePath {
         muteRules.removeAll()
         cache.removeAll()
         if client.esUnmuteAllPaths() != ES_RETURN_SUCCESS {
+            log.warning("Failed to unmute all paths")
+        }
+    }
+    
+    func unmuteAllTarget() {
+        guard #available(macOS 13.0, *) else { return }
+        if client.esUnmuteAllTargetPaths() != ES_RETURN_SUCCESS {
             log.warning("Failed to unmute all paths")
         }
     }
@@ -218,6 +231,15 @@ extension ESMutePathRule {
             return process.signingID == value
         }
     }
+    
+    var isTargetPath: Bool {
+        switch self {
+        case .path(_, let pathType), .name(_, let pathType):
+            return [.targetPrefix, .targetLiteral].contains(pathType)
+        case .teamIdentifier, .signingID:
+            return false
+        }
+    }
 }
 
 extension ESMutePathRule.PathType {
@@ -225,6 +247,8 @@ extension ESMutePathRule.PathType {
         switch self {
         case .prefix: return ES_MUTE_PATH_TYPE_PREFIX
         case .literal: return ES_MUTE_PATH_TYPE_LITERAL
+        case .targetPrefix: return ES_MUTE_PATH_TYPE_TARGET_PREFIX
+        case .targetLiteral: return ES_MUTE_PATH_TYPE_TARGET_LITERAL
         }
     }
     
@@ -234,6 +258,8 @@ extension ESMutePathRule.PathType {
             return string.hasPrefix(pattern)
         case .literal:
             return string == pattern
+        case .targetPrefix, .targetLiteral:
+            return false
         }
     }
 }

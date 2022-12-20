@@ -42,7 +42,7 @@ public struct ESMessage: Equatable, Codable {
         case notify(ESAuthResult)
     }
     
-    public init(version: UInt32, time: timespec, machTime: UInt64, deadline: UInt64, process: ESProcess, seqNum: UInt64? = nil, action: ESMessage.Action, event: ESEvent, eventType: es_event_type_t, thread: ESThread? = nil, globalSeqNum: UInt64? = nil) {
+    public init(version: UInt32, time: timespec, machTime: UInt64, deadline: UInt64, process: ESProcess, seqNum: UInt64?, action: ESMessage.Action, event: ESEvent, eventType: es_event_type_t, thread: ESThread?, globalSeqNum: UInt64?) {
         self.version = version
         self.time = time
         self.machTime = machTime
@@ -75,7 +75,7 @@ public struct ESProcess: Equatable, Codable {
     public var responsibleAuditToken: audit_token_t? /* field available only if message version >= 4 */
     public var parentAuditToken: audit_token_t? /* field available only if message version >= 4 */
     
-    public init(auditToken: audit_token_t, ppid: pid_t, originalPpid: pid_t, groupID: pid_t, sessionID: pid_t, codesigningFlags: UInt32, isPlatformBinary: Bool, isESClient: Bool, cdHash: Data, signingID: String, teamID: String, executable: ESFile, tty: ESFile? = nil, startTime: timeval? = nil, responsibleAuditToken: audit_token_t? = nil, parentAuditToken: audit_token_t? = nil) {
+    public init(auditToken: audit_token_t, ppid: pid_t, originalPpid: pid_t, groupID: pid_t, sessionID: pid_t, codesigningFlags: UInt32, isPlatformBinary: Bool, isESClient: Bool, cdHash: Data, signingID: String, teamID: String, executable: ESFile, tty: ESFile?, startTime: timeval?, responsibleAuditToken: audit_token_t?, parentAuditToken: audit_token_t?) {
         self.auditToken = auditToken
         self.ppid = ppid
         self.originalPpid = originalPpid
@@ -140,8 +140,29 @@ public struct ESAuthResult: Equatable, Codable, RawRepresentable {
     }
 }
 
+public struct BTMLaunchItem: Equatable, Codable {
+    public var itemType: es_btm_item_type_t
+    public var legacy: Bool
+    public var managed: Bool
+    public var uid: uid_t
+    public var itemURL: String
+    public var appURL: String
+    
+    public init(itemType: es_btm_item_type_t, legacy: Bool, managed: Bool, uid: uid_t, itemURL: String, appURL: String) {
+        self.itemType = itemType
+        self.legacy = legacy
+        self.managed = managed
+        self.uid = uid
+        self.itemURL = itemURL
+        self.appURL = appURL
+    }
+}
+
 public enum ESEvent: Equatable, Codable {
     case access(Access)
+    case authentication(Authentication)
+    case btmLaunchItemAdd(BTMLaunchItemAdd)
+    case btmLaunchItemRemove(BTMLaunchItemRemove)
     case chdir(Chdir)
     case chroot(Chroot)
     case clone(Clone)
@@ -170,11 +191,19 @@ public enum ESEvent: Equatable, Codable {
     case kextunload(KextUnload)
     case link(Link)
     case listextattr(ListExtAttr)
+    case loginLogin(LoginLogin)
+    case loginLogout(LoginLogout)
     case lookup(Lookup)
+    case lwSessionLogin(LWSessionLogin)
+    case lwSessionLogout(LWSessionLogout)
+    case lwSessionLock(LWSessionLock)
+    case lwSessionUnlock(LWSessionUnlock)
     case mmap(MMap)
     case mount(Mount)
     case mprotect(MProtect)
     case open(Open)
+    case opensshLogin(OpensshLogin)
+    case opensshLogout(OpensshLogout)
     case procCheck(ProcCheck)
     case procSuspendResume(ProcSuspendResume)
     case ptyClose(PtyClose)
@@ -184,6 +213,8 @@ public enum ESEvent: Equatable, Codable {
     case remoteThreadCreate(RemoteThreadCreate)
     case remount(Remount)
     case rename(Rename)
+    case screensharingAttach(ScreensharingAttach)
+    case screensharingDetach(ScreensharingDetach)
     case searchfs(SearchFS)
     case setacl(SetACL)
     case setattrlist(SetAttrList)
@@ -204,6 +235,8 @@ public enum ESEvent: Equatable, Codable {
     case unmount(Unmount)
     case utimes(Utimes)
     case write(Write)
+    case xpMalwareDetected(XPMalwareDetected)
+    case xpMalwareRemediated(XPMalwareRemediated)
 }
 
 public extension ESEvent {
@@ -214,6 +247,101 @@ public extension ESEvent {
         public init(mode: Int32, target: ESFile) {
             self.mode = mode
             self.target = target
+        }
+    }
+    
+    struct Authentication: Equatable, Codable {
+        public var success: Bool
+        public var type: AuthenticationType
+        
+        public init(success: Bool, type: AuthenticationType) {
+            self.success = success
+            self.type = type
+        }
+    }
+    
+    enum AuthenticationType: Equatable, Codable {
+        case od(OD)
+        case touchID(TouchID)
+        case token(Token)
+        case autoUnlock(AutoUnlock)
+        
+        public struct OD: Equatable, Codable {
+            public var instigator: ESProcess
+            public var recordType: String
+            public var recordName: String
+            public var nodeName: String
+            public var dbPath: String
+            
+            public init(instigator: ESProcess, recordType: String, recordName: String, nodeName: String, dbPath: String) {
+                self.instigator = instigator
+                self.recordType = recordType
+                self.recordName = recordName
+                self.nodeName = nodeName
+                self.dbPath = dbPath
+            }
+        }
+        
+        public struct TouchID: Equatable, Codable {
+            public var instigator: ESProcess
+            public var touchIDMode: es_touchid_mode_t
+            public var uid: uid_t?
+            
+            public init(instigator: ESProcess, touchIDMode: es_touchid_mode_t, uid: uid_t?) {
+                self.instigator = instigator
+                self.touchIDMode = touchIDMode
+                self.uid = uid
+            }
+        }
+        
+        public struct Token: Equatable, Codable {
+            public var instigator: ESProcess
+            public var pubkeyHash: String
+            public var tokenID: String
+            public var kerberosPrincipal: String
+            
+            public init(instigator: ESProcess, pubkeyHash: String, tokenID: String, kerberosPrincipal: String) {
+                self.instigator = instigator
+                self.pubkeyHash = pubkeyHash
+                self.tokenID = tokenID
+                self.kerberosPrincipal = kerberosPrincipal
+            }
+        }
+        
+        public struct AutoUnlock: Equatable, Codable {
+            public var username: String
+            public var type: es_auto_unlock_type_t
+            
+            public init(username: String, type: es_auto_unlock_type_t) {
+                self.username = username
+                self.type = type
+            }
+        }
+    }
+    
+    struct BTMLaunchItemAdd: Equatable, Codable {
+        public var instigator: ESProcess?
+        public var app: ESProcess?
+        public var item: BTMLaunchItem
+        public var executablePath: String
+        
+        public init(instigator: ESProcess?, app: ESProcess?, item: BTMLaunchItem, executablePath: String) {
+            self.instigator = instigator
+            self.app = app
+            self.item = item
+            self.executablePath = executablePath
+        }
+    }
+    
+    struct BTMLaunchItemRemove: Equatable, Codable {
+        public var instigator: ESProcess?
+        public var app: ESProcess?
+        public var item: BTMLaunchItem
+        
+        public init(instigator: ESProcess?, app: ESProcess?, item: BTMLaunchItem) {
+            self.instigator = instigator
+            self.app = app
+            self.item = item
         }
     }
     
@@ -253,7 +381,7 @@ public extension ESEvent {
         public var mode: mode_t
         public var flags: Int32
         
-        public init(source: ESFile, targetFile: ESFile? = nil, targetDir: ESFile, targetName: String, mode: mode_t, flags: Int32) {
+        public init(source: ESFile, targetFile: ESFile?, targetDir: ESFile, targetName: String, mode: mode_t, flags: Int32) {
             self.source = source
             self.targetFile = targetFile
             self.targetDir = targetDir
@@ -335,7 +463,7 @@ public extension ESEvent {
         public var args: [String]? // present if ESConverter.Config.execArgs == true
         public var env: [String]? // present if ESConverter.Config.execEnv == true
         
-        public init(target: ESProcess, script: ESFile? = nil, cwd: ESFile? = nil, lastFD: Int32? = nil) {
+        public init(target: ESProcess, script: ESFile?, cwd: ESFile?, lastFD: Int32?) {
             self.target = target
             self.script = script
             self.cwd = cwd
@@ -477,6 +605,30 @@ public extension ESEvent {
         }
     }
     
+    struct LoginLogin: Equatable, Codable {
+        public var success: Bool
+        public var failureMessage: String
+        public var username: String
+        public var uid: uid_t?
+        
+        public init(success: Bool, failureMessage: String, username: String, uid: uid_t?) {
+            self.success = success
+            self.failureMessage = failureMessage
+            self.username = username
+            self.uid = uid
+        }
+    }
+    
+    struct LoginLogout: Equatable, Codable {
+        public var username: String
+        public var uid: uid_t
+        
+        public init(username: String, uid: uid_t) {
+            self.username = username
+            self.uid = uid
+        }
+    }
+    
     struct Link: Equatable, Codable {
         public var source: ESFile
         public var targetDir: ESFile
@@ -506,6 +658,20 @@ public extension ESEvent {
             self.relativeTarget = relativeTarget
         }
     }
+    
+    struct LWSessionLogin: Equatable, Codable {
+        public var username: String
+        public var graphicalSessionID: es_graphical_session_id_t
+        
+        public init(username: String, graphicalSessionID: es_graphical_session_id_t) {
+            self.username = username
+            self.graphicalSessionID = graphicalSessionID
+        }
+    }
+    
+    typealias LWSessionLogout = LWSessionLogin
+    typealias LWSessionLock = LWSessionLogin
+    typealias LWSessionUnlock = LWSessionLogin
     
     struct MMap: Equatable, Codable {
         public var protection: Int32
@@ -553,12 +719,44 @@ public extension ESEvent {
         }
     }
     
+    struct OpensshLogin: Equatable, Codable {
+        public var success: Bool
+        public var resultType: es_openssh_login_result_type_t
+        public var sourceAddressType: es_address_type_t
+        public var sourceAddress: String
+        public var username: String
+        public var uid: uid_t?
+        
+        public init(success: Bool, resultType: es_openssh_login_result_type_t, sourceAddressType: es_address_type_t, sourceAddress: String, username: String, uid: uid_t?) {
+            self.success = success
+            self.resultType = resultType
+            self.sourceAddressType = sourceAddressType
+            self.sourceAddress = sourceAddress
+            self.username = username
+            self.uid = uid
+        }
+    }
+    
+    struct OpensshLogout: Equatable, Codable {
+        public var sourceAddressType: es_address_type_t
+        public var sourceAddress: String
+        public var username: String
+        public var uid: uid_t
+        
+        public init(sourceAddressType: es_address_type_t, sourceAddress: String, username: String, uid: uid_t) {
+            self.sourceAddressType = sourceAddressType
+            self.sourceAddress = sourceAddress
+            self.username = username
+            self.uid = uid
+        }
+    }
+    
     struct ProcCheck: Equatable, Codable {
         public var target: ESProcess?
         public var type: es_proc_check_type_t
         public var flavor: Int32
         
-        public init(target: ESProcess? = nil, type: es_proc_check_type_t, flavor: Int32) {
+        public init(target: ESProcess?, type: es_proc_check_type_t, flavor: Int32) {
             self.target = target
             self.type = type
             self.flavor = flavor
@@ -569,7 +767,7 @@ public extension ESEvent {
         public var target: ESProcess?
         public var type: es_proc_suspend_resume_type_t
         
-        public init(target: ESProcess? = nil, type: es_proc_suspend_resume_type_t) {
+        public init(target: ESProcess?, type: es_proc_suspend_resume_type_t) {
             self.target = target
             self.type = type
         }
@@ -611,7 +809,7 @@ public extension ESEvent {
         public var target: ESProcess
         public var threadState: ESThreadState?
         
-        public init(target: ESProcess, threadState: ESThreadState? = nil) {
+        public init(target: ESProcess, threadState: ESThreadState?) {
             self.target = target
             self.threadState = threadState
         }
@@ -637,6 +835,44 @@ public extension ESEvent {
         public init(source: ESFile, destination: ESEvent.Rename.Destination) {
             self.source = source
             self.destination = destination
+        }
+    }
+    
+    struct ScreensharingAttach: Equatable, Codable {
+        public var success: Bool
+        public var sourceAddressType: es_address_type_t
+        public var sourceAddress: String
+        public var viewerAppleID: String
+        public var authenticationType: String
+        public var authenticationUsername: String
+        public var sessionUsername: String
+        public var existingSession: Bool
+        public var graphicalSessionID: es_graphical_session_id_t
+        
+        public init(success: Bool, sourceAddressType: es_address_type_t, sourceAddress: String, viewerAppleID: String, authenticationType: String, authenticationUsername: String, sessionUsername: String, existingSession: Bool, graphicalSessionID: es_graphical_session_id_t) {
+            self.success = success
+            self.sourceAddressType = sourceAddressType
+            self.sourceAddress = sourceAddress
+            self.viewerAppleID = viewerAppleID
+            self.authenticationType = authenticationType
+            self.authenticationUsername = authenticationUsername
+            self.sessionUsername = sessionUsername
+            self.existingSession = existingSession
+            self.graphicalSessionID = graphicalSessionID
+        }
+    }
+    
+    struct ScreensharingDetach: Equatable, Codable {
+        public var sourceAddressType: es_address_type_t
+        public var sourceAddress: String
+        public var viewerAppleID: String
+        public var graphicalSessionID: es_graphical_session_id_t
+        
+        public init(sourceAddressType: es_address_type_t, sourceAddress: String, viewerAppleID: String, graphicalSessionID: es_graphical_session_id_t) {
+            self.sourceAddressType = sourceAddressType
+            self.sourceAddress = sourceAddress
+            self.viewerAppleID = viewerAppleID
+            self.graphicalSessionID = graphicalSessionID
         }
     }
     
@@ -837,6 +1073,42 @@ public extension ESEvent {
         
         public init(target: ESFile) {
             self.target = target
+        }
+    }
+    
+    struct XPMalwareDetected: Equatable, Codable {
+        public var signatureVersion: String
+        public var malwareIdentifier: String
+        public var incidentIdentifier: String
+        public var detectedPath: String
+        
+        public init(signatureVersion: String, malwareIdentifier: String, incidentIdentifier: String, detectedPath: String) {
+            self.signatureVersion = signatureVersion
+            self.malwareIdentifier = malwareIdentifier
+            self.incidentIdentifier = incidentIdentifier
+            self.detectedPath = detectedPath
+        }
+    }
+    
+    struct XPMalwareRemediated: Equatable, Codable {
+        public var signatureVersion: String
+        public var malwareIdentifier: String
+        public var incidentIdentifier: String
+        public var actionType: String
+        public var success: Bool
+        public var resultDescription: String
+        public var remediatedPath: String
+        public var remediatedProcessAuditToken: audit_token_t?
+        
+        public init(signatureVersion: String, malwareIdentifier: String, incidentIdentifier: String, actionType: String, success: Bool, resultDescription: String, remediatedPath: String, remediatedProcessAuditToken: audit_token_t?) {
+            self.signatureVersion = signatureVersion
+            self.malwareIdentifier = malwareIdentifier
+            self.incidentIdentifier = incidentIdentifier
+            self.actionType = actionType
+            self.success = success
+            self.resultDescription = resultDescription
+            self.remediatedPath = remediatedPath
+            self.remediatedProcessAuditToken = remediatedProcessAuditToken
         }
     }
 }

@@ -235,6 +235,27 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
             reply(error.xpcCompatible())
         }
     }
+    
+    func unmuteAllTargetPaths(reply: @escaping (Error?) -> Void) {
+        do {
+            let client = try _client.get(name: "ESClient")
+            client.unmuteAllTargetPaths()
+            reply(nil)
+        } catch {
+            log.error("Failed to unmuteAllPaths. Error: \(error)")
+            reply(error.xpcCompatible())
+        }
+    }
+    
+    func invertMuting(_ muteType: es_mute_inversion_type_t, completion: @escaping (Bool) -> Void) {
+        let result = _client?.invertMuting(muteType) ?? false
+        completion(result)
+    }
+    
+    func mutingInverted(_ muteType: es_mute_inversion_type_t, completion: @escaping (Int) -> Void) {
+        let result = _client?.mutingInverted(muteType)
+        completion(result.flatMap { $0 ? 1 : 0 } ?? -1)
+    }
 
     func custom(id: UUID, payload: Data, isReply: Bool, reply: @escaping () -> Void) {
         DispatchQueue.global().async {

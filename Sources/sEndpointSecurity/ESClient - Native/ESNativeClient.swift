@@ -31,6 +31,12 @@ public protocol ESNativeClient {
     
     func esClearCache() -> es_clear_cache_result_t
     
+    @available(macOS 13.0, *)
+    func esInvertMuting(_ muteType: es_mute_inversion_type_t) -> es_return_t
+    
+    @available(macOS 13.0, *)
+    func esMutingInverted(_ muteType: es_mute_inversion_type_t) -> es_mute_inverted_return_t
+    
     // MARK: Mute by Process
     
     func esMuteProcess(_ auditToken: audit_token_t) -> es_return_t
@@ -57,6 +63,9 @@ public protocol ESNativeClient {
     func esUnmutePathEvents(_ path: String, _ type: es_mute_path_type_t, _ events: [es_event_type_t]) -> es_return_t
     
     func esUnmuteAllPaths() -> es_return_t
+    
+    @available(macOS 13.0, *)
+    func esUnmuteAllTargetPaths() -> es_return_t
 }
 
 extension OpaquePointer: ESNativeClient {
@@ -82,6 +91,16 @@ extension OpaquePointer: ESNativeClient {
     
     public func esClearCache() -> es_clear_cache_result_t {
         es_clear_cache(self)
+    }
+    
+    @available(macOS 13.0, *)
+    public func esInvertMuting(_ muteType: es_mute_inversion_type_t) -> es_return_t {
+        es_invert_muting(self, muteType)
+    }
+    
+    @available(macOS 13.0, *)
+    public func esMutingInverted(_ muteType: es_mute_inversion_type_t) -> es_mute_inverted_return_t {
+        es_muting_inverted(self, muteType)
     }
     
     public func esUnsubscribeAll() -> es_return_t {
@@ -162,6 +181,11 @@ extension OpaquePointer: ESNativeClient {
         withRawValues(events) {
             es_unmute_path_events(self, path, type, $0, $1)
         }
+    }
+    
+    @available(macOS 13.0, *)
+    public func esUnmuteAllTargetPaths() -> es_return_t {
+        es_unmute_all_target_paths(self)
     }
     
     private func withRawValues<T, Count: BinaryInteger>(_ values: [T], body: (UnsafePointer<T>, Count) -> es_return_t) -> es_return_t {

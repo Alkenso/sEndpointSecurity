@@ -249,4 +249,19 @@ private class MockNativeClient: ESNativeClient {
         XCTFail()
         return ES_RETURN_ERROR
     }
+    
+    func esUnmuteAllTargetPaths() -> es_return_t {
+        XCTFail()
+        return ES_RETURN_ERROR
+    }
+    
+    func esInvertMuting(_ muteType: es_mute_inversion_type_t) -> es_return_t {
+        XCTFail()
+        return ES_RETURN_ERROR
+    }
+    
+    func esMutingInverted(_ muteType: es_mute_inversion_type_t) -> es_mute_inverted_return_t {
+        XCTFail()
+        return ES_MUTE_INVERTED_ERROR
+    }
 }

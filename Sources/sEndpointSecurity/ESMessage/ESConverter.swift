@@ -151,6 +151,17 @@ public extension ESConverter {
         }
     }
     
+    func esBTMLaunchItem(_ es: UnsafePointer<es_btm_launch_item_t>) -> BTMLaunchItem {
+        .init(
+            itemType: es.pointee.item_type,
+            legacy: es.pointee.legacy,
+            managed: es.pointee.managed,
+            uid: es.pointee.uid,
+            itemURL: esString(es.pointee.item_url),
+            appURL: esString(es.pointee.app_url)
+        )
+    }
+    
     func esEvent(_ type: es_event_type_t, _ event: es_events_t) throws -> ESEvent {
         switch type {
         case ES_EVENT_TYPE_AUTH_EXEC:
@@ -373,6 +384,37 @@ public extension ESConverter {
             return .setreuid(esEvent(setregid: event.setregid))
         case ES_EVENT_TYPE_AUTH_COPYFILE, ES_EVENT_TYPE_NOTIFY_COPYFILE:
             return .copyfile(esEvent(copyfile: event.copyfile))
+            // macOS 13.0:
+        case ES_EVENT_TYPE_NOTIFY_AUTHENTICATION:
+            return try .authentication(esEvent(authentication: event.authentication))
+        case ES_EVENT_TYPE_NOTIFY_XP_MALWARE_DETECTED:
+            return .xpMalwareDetected(esEvent(xpMalwareDetected: event.xp_malware_detected))
+        case ES_EVENT_TYPE_NOTIFY_XP_MALWARE_REMEDIATED:
+            return .xpMalwareRemediated(esEvent(xpMalwareRemediated: event.xp_malware_remediated))
+        case ES_EVENT_TYPE_NOTIFY_LW_SESSION_LOGIN:
+            return .lwSessionLogin(esEvent(lwSessionLogin: event.lw_session_login))
+        case ES_EVENT_TYPE_NOTIFY_LW_SESSION_LOGOUT:
+            return .lwSessionLogout(esEvent(lwSessionLogout: event.lw_session_logout))
+        case ES_EVENT_TYPE_NOTIFY_LW_SESSION_LOCK:
+            return .lwSessionLock(esEvent(lwSessionLock: event.lw_session_lock))
+        case ES_EVENT_TYPE_NOTIFY_LW_SESSION_UNLOCK:
+            return .lwSessionUnlock(esEvent(lwSessionUnlock: event.lw_session_unlock))
+        case ES_EVENT_TYPE_NOTIFY_SCREENSHARING_ATTACH:
+            return .screensharingAttach(esEvent(screensharingAttach: event.screensharing_attach))
+        case ES_EVENT_TYPE_NOTIFY_SCREENSHARING_DETACH:
+            return .screensharingDetach(esEvent(screensharingDetach: event.screensharing_detach))
+        case ES_EVENT_TYPE_NOTIFY_OPENSSH_LOGIN:
+            return .opensshLogin(esEvent(opensshLogin: event.openssh_login))
+        case ES_EVENT_TYPE_NOTIFY_OPENSSH_LOGOUT:
+            return .opensshLogout(esEvent(opensshLogout: event.openssh_logout))
+        case ES_EVENT_TYPE_NOTIFY_LOGIN_LOGIN:
+            return .loginLogin(esEvent(loginLogin: event.login_login))
+        case ES_EVENT_TYPE_NOTIFY_LOGIN_LOGOUT:
+            return .loginLogout(esEvent(loginLogout: event.login_logout))
+        case ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_ADD:
+            return .btmLaunchItemAdd(esEvent(btmLaunchItemAdd: event.btm_launch_item_add))
+        case ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_REMOVE:
+            return .btmLaunchItemRemove(esEvent(btmLaunchItemRemove: event.btm_launch_item_remove))
         default:
             throw CommonError.invalidArgument(arg: "es_event_type_t", invalidValue: type)
         }
@@ -685,4 +727,164 @@ public extension ESConverter {
     func esEvent(write es: es_event_write_t) -> ESEvent.Write {
         .init(target: esFile(es.target))
     }
+    
+
+    func esEvent(authentication es: UnsafePointer<es_event_authentication_t>) throws -> ESEvent.Authentication {
+        let type: ESEvent.AuthenticationType
+        switch es.pointee.type {
+        case ES_AUTHENTICATION_TYPE_OD:
+            type = .od(.init(
+                instigator: esProcess(es.pointee.data.od.pointee.instigator),
+                recordType: esString(es.pointee.data.od.pointee.record_type),
+                recordName: esString(es.pointee.data.od.pointee.record_name),
+                nodeName: esString(es.pointee.data.od.pointee.node_name),
+                dbPath: esString(es.pointee.data.od.pointee.db_path)
+            ))
+        case ES_AUTHENTICATION_TYPE_TOUCHID:
+            type = .touchID(.init(
+                instigator: esProcess(es.pointee.data.touchid.pointee.instigator),
+                touchIDMode: es.pointee.data.touchid.pointee.touchid_mode,
+                uid: es.pointee.data.touchid.pointee.has_uid ? es.pointee.data.touchid.pointee.uid.uid : nil
+            ))
+        case ES_AUTHENTICATION_TYPE_TOKEN:
+            type = .token(.init(
+                instigator: esProcess(es.pointee.data.token.pointee.instigator),
+                pubkeyHash: esString(es.pointee.data.token.pointee.pubkey_hash),
+                tokenID: esString(es.pointee.data.token.pointee.token_id),
+                kerberosPrincipal: esString(es.pointee.data.token.pointee.kerberos_principal)
+            ))
+        case ES_AUTHENTICATION_TYPE_AUTO_UNLOCK:
+            type = .autoUnlock(.init(
+                username: esString(es.pointee.data.auto_unlock.pointee.username),
+                type: es.pointee.data.auto_unlock.pointee.type
+            ))
+        default:
+            throw CommonError.invalidArgument(arg: "es_event_authentication_typet", invalidValue: es.pointee.type)
+        }
+        return .init(success: es.pointee.success, type: type)
+    }
+    
+    func esEvent(xpMalwareDetected es: UnsafePointer<es_event_xp_malware_detected_t>) -> ESEvent.XPMalwareDetected {
+        .init(
+            signatureVersion: esString(es.pointee.signature_version),
+            malwareIdentifier: esString(es.pointee.malware_identifier),
+            incidentIdentifier: esString(es.pointee.incident_identifier),
+            detectedPath: esString(es.pointee.detected_path)
+        )
+    }
+    
+    func esEvent(xpMalwareRemediated es: UnsafePointer<es_event_xp_malware_remediated_t>) -> ESEvent.XPMalwareRemediated {
+        .init(
+            signatureVersion: esString(es.pointee.signature_version),
+            malwareIdentifier: esString(es.pointee.malware_identifier),
+            incidentIdentifier: esString(es.pointee.incident_identifier),
+            actionType: esString(es.pointee.action_type),
+            success: es.pointee.success,
+            resultDescription: esString(es.pointee.result_description),
+            remediatedPath: esString(es.pointee.remediated_path),
+            remediatedProcessAuditToken: es.pointee.remediated_process_audit_token?.pointee
+        )
+    }
+    
+    func esEvent(lwSessionLogin es: UnsafePointer<es_event_lw_session_login_t>) -> ESEvent.LWSessionLogin {
+        .init(
+            username: esString(es.pointee.username),
+            graphicalSessionID: es.pointee.graphical_session_id
+        )
+    }
+    
+    func esEvent(lwSessionLogout es: UnsafePointer<es_event_lw_session_logout_t>) -> ESEvent.LWSessionLogout {
+        .init(
+            username: esString(es.pointee.username),
+            graphicalSessionID: es.pointee.graphical_session_id
+        )
+    }
+    
+    func esEvent(lwSessionLock es: UnsafePointer<es_event_lw_session_lock_t>) -> ESEvent.LWSessionLock {
+        .init(
+            username: esString(es.pointee.username),
+            graphicalSessionID: es.pointee.graphical_session_id
+        )
+    }
+    
+    func esEvent(lwSessionUnlock es: UnsafePointer<es_event_lw_session_unlock_t>) -> ESEvent.LWSessionUnlock {
+        .init(
+            username: esString(es.pointee.username),
+            graphicalSessionID: es.pointee.graphical_session_id
+        )
+    }
+    
+    func esEvent(screensharingAttach es: UnsafePointer<es_event_screensharing_attach_t>) -> ESEvent.ScreensharingAttach {
+        .init(
+            success: es.pointee.success,
+            sourceAddressType: es.pointee.source_address_type,
+            sourceAddress: esString(es.pointee.source_address),
+            viewerAppleID: esString(es.pointee.viewer_appleid),
+            authenticationType: esString(es.pointee.authentication_type),
+            authenticationUsername: esString(es.pointee.authentication_username),
+            sessionUsername: esString(es.pointee.session_username),
+            existingSession: es.pointee.existing_session,
+            graphicalSessionID: es.pointee.graphical_session_id
+        )
+    }
+    
+    func esEvent(screensharingDetach es: UnsafePointer<es_event_screensharing_detach_t>) -> ESEvent.ScreensharingDetach {
+        .init(
+            sourceAddressType: es.pointee.source_address_type,
+            sourceAddress: esString(es.pointee.source_address),
+            viewerAppleID: esString(es.pointee.viewer_appleid),
+            graphicalSessionID: es.pointee.graphical_session_id
+        )
+    }
+    
+    func esEvent(opensshLogin es: UnsafePointer<es_event_openssh_login_t>) -> ESEvent.OpensshLogin {
+        .init(
+            success: es.pointee.success,
+            resultType: es.pointee.result_type,
+            sourceAddressType: es.pointee.source_address_type,
+            sourceAddress: esString(es.pointee.source_address),
+            username: esString(es.pointee.username),
+            uid: es.pointee.has_uid ? es.pointee.uid.uid : nil
+        )
+    }
+    
+    func esEvent(opensshLogout es: UnsafePointer<es_event_openssh_logout_t>) -> ESEvent.OpensshLogout {
+        .init(
+            sourceAddressType: es.pointee.source_address_type,
+            sourceAddress: esString(es.pointee.source_address),
+            username: esString(es.pointee.username),
+            uid: es.pointee.uid
+        )
+    }
+    
+    func esEvent(loginLogin es: UnsafePointer<es_event_login_login_t>) -> ESEvent.LoginLogin {
+        .init(
+            success: es.pointee.success,
+            failureMessage: esString(es.pointee.failure_message),
+            username: esString(es.pointee.username),
+            uid: es.pointee.has_uid ? es.pointee.uid.uid : nil
+        )
+    }
+    
+    func esEvent(loginLogout es: UnsafePointer<es_event_login_logout_t>) -> ESEvent.LoginLogout {
+        .init(username: esString(es.pointee.username), uid: es.pointee.uid)
+    }
+    
+    func esEvent(btmLaunchItemAdd es: UnsafePointer<es_event_btm_launch_item_add_t>) -> ESEvent.BTMLaunchItemAdd {
+        .init(
+            instigator: es.pointee.instigator.flatMap(esProcess),
+            app: es.pointee.app.flatMap(esProcess),
+            item: esBTMLaunchItem(es.pointee.item),
+            executablePath: esString(es.pointee.executable_path)
+        )
+    }
+    
+    func esEvent(btmLaunchItemRemove es: UnsafePointer<es_event_btm_launch_item_remove_t>) -> ESEvent.BTMLaunchItemRemove {
+        .init(
+            instigator: es.pointee.instigator.flatMap(esProcess),
+            app: es.pointee.instigator.flatMap(esProcess),
+            item: esBTMLaunchItem(es.pointee.item)
+        )
+    }
+    
 }
