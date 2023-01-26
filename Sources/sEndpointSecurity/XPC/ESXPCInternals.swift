@@ -43,6 +43,9 @@ internal protocol ESClientXPCProtocol {
     func mutePath(_ mute: ESMutePathRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void)
     func unmutePath(_ mute: ESMutePathRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void)
     func unmuteAllPaths(reply: @escaping (Error?) -> Void)
+    
+    func muteTargetPath(_ targetPath: String, type muteType: Data, events: ESEventSetXPC, completion: @escaping (Bool) -> Void)
+    func unmuteTargetPath(_ targetPath: String, type muteType: Data, events: ESEventSetXPC, completion: @escaping (Bool) -> Void)
     func unmuteAllTargetPaths(reply: @escaping (Error?) -> Void)
     
     func invertMuting(_ muteType: es_mute_inversion_type_t, completion: @escaping (Bool) -> Void)

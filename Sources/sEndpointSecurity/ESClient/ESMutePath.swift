@@ -27,23 +27,14 @@ import SwiftConvenience
 private let log = SCLogger.internalLog(.client)
 
 public enum ESMutePathRule: Hashable, Codable {
-    case path(String, PathType)
-    case name(String, PathType)
+    case path(String, ESMutePathType)
+    case name(String, ESMutePathType)
     
     //  Codesign Team Identifier (DEVELOPMENT_TEAM in Xcode)
     case teamIdentifier(String)
     
     //  Usually equals to application bundle identifier
     case signingID(String)
-    
-    public enum PathType: Hashable, Codable {
-        case prefix
-        case literal
-        
-        // Makes sense only for macOS 13.0+.
-        case targetPrefix
-        case targetLiteral
-    }
 }
 
 internal class ESMutePath {
@@ -110,10 +101,8 @@ internal class ESMutePath {
         os_unfair_lock_lock(&cacheLock)
         defer { os_unfair_lock_unlock(&cacheLock) }
         
-        muteNative(mute, events: events)
-        
-        guard !mute.isTargetPath else { return }
         muteRules[mute, default: []].events.formUnion(events.events)
+        muteNative(mute, events: events)
         
         if useAPIv12 {
             invalidateCache()
@@ -152,13 +141,6 @@ internal class ESMutePath {
         }
     }
     
-    func unmuteAllTarget() {
-        guard #available(macOS 13.0, *) else { return }
-        if client.esUnmuteAllTargetPaths() != ES_RETURN_SUCCESS {
-            log.warning("Failed to unmute all paths")
-        }
-    }
-    
     private func invalidateCache(nativeUnmute: Bool = true) {
         guard !cache.isEmpty else { return }
         
@@ -191,11 +173,11 @@ internal class ESMutePath {
         switch mute {
         case .path(let path, let type):
             if useAPIv12, #available(macOS 12.0, *) {
-                if client.esMutePathEvents(path, type.esMutePathType, Array(events.events)) != ES_RETURN_SUCCESS {
+                if client.esMutePathEvents(path, type.process, Array(events.events)) != ES_RETURN_SUCCESS {
                     log.warning("Failed to mute path events: type = \(type), path = \(path)")
                 }
             } else if events == .all {
-                if client.esMutePath(path, type.esMutePathType) != ES_RETURN_SUCCESS {
+                if client.esMutePath(path, type.process) != ES_RETURN_SUCCESS {
                     log.warning("Failed to mute path: type = \(type), path = \(path)")
                 }
             }
@@ -209,7 +191,7 @@ internal class ESMutePath {
         
         switch mute {
         case .path(let path, let type):
-            if client.esUnmutePathEvents(path, type.esMutePathType, Array(events.events)) != ES_RETURN_SUCCESS {
+            if client.esUnmutePathEvents(path, type.process, Array(events.events)) != ES_RETURN_SUCCESS {
                 log.warning("Failed to unmute path events: type = \(type), path = \(path)")
             }
         case .name, .teamIdentifier, .signingID:
@@ -231,35 +213,15 @@ extension ESMutePathRule {
             return process.signingID == value
         }
     }
-    
-    var isTargetPath: Bool {
-        switch self {
-        case .path(_, let pathType), .name(_, let pathType):
-            return [.targetPrefix, .targetLiteral].contains(pathType)
-        case .teamIdentifier, .signingID:
-            return false
-        }
-    }
 }
 
-extension ESMutePathRule.PathType {
-    internal var esMutePathType: es_mute_path_type_t {
-        switch self {
-        case .prefix: return ES_MUTE_PATH_TYPE_PREFIX
-        case .literal: return ES_MUTE_PATH_TYPE_LITERAL
-        case .targetPrefix: return ES_MUTE_PATH_TYPE_TARGET_PREFIX
-        case .targetLiteral: return ES_MUTE_PATH_TYPE_TARGET_LITERAL
-        }
-    }
-    
-    internal func match(string: String, pattern: String) -> Bool {
+extension ESMutePathType {
+    fileprivate func match(string: String, pattern: String) -> Bool {
         switch self {
         case .prefix:
             return string.hasPrefix(pattern)
         case .literal:
             return string == pattern
-        case .targetPrefix, .targetLiteral:
-            return false
         }
     }
 }

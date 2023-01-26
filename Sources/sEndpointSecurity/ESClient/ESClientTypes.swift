@@ -110,3 +110,34 @@ extension ESMuteResolution {
         mutePath ? .empty : muteEvents
     }
 }
+
+public enum ESMutePathType: Hashable, Codable {
+    case prefix
+    case literal
+}
+
+extension ESMutePathType {
+    public var process: es_mute_path_type_t {
+        switch self {
+        case .prefix: return ES_MUTE_PATH_TYPE_PREFIX
+        case .literal: return ES_MUTE_PATH_TYPE_LITERAL
+        }
+    }
+    
+    public var targetPath: es_mute_path_type_t {
+        switch self {
+        case .prefix: return ES_MUTE_PATH_TYPE_TARGET_PREFIX
+        case .literal: return ES_MUTE_PATH_TYPE_TARGET_LITERAL
+        }
+    }
+}
+
+public struct ESReturnError: Error {
+    public var value: es_return_t
+    public var action: String?
+    
+    public init(_ action: String? = nil, value: es_return_t = ES_RETURN_ERROR) {
+        self.value = value
+        self.action = action
+    }
+}

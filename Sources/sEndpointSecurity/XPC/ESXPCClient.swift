@@ -129,6 +129,18 @@ public class ESXPCClient {
         remoteObjectProxy(completion)?.unmuteAllPaths(reply: completion)
     }
     
+    public func muteTargetPath(_ targetPath: String, type muteType: ESMutePathType, events: ESEventSet = .all, completion: @escaping (Result<Bool, Error>) -> Void) {
+        withEncodedMute(muteType, events: events, actionName: "mute target path", reply: { completion(.failure($0)) }) { client, mute, events in
+            client.muteTargetPath(targetPath, type: mute, events: events) { completion(.success($0)) }
+        }
+    }
+    
+    public func unmuteTagetPath(_ targetPath: String, type muteType: ESMutePathType, events: ESEventSet = .all, completion: @escaping (Result<Bool, Error>) -> Void) {
+        withEncodedMute(muteType, events: events, actionName: "unmute target path", reply: { completion(.failure($0)) }) { client, mute, events in
+            client.unmuteTargetPath(targetPath, type: mute, events: events) { completion(.success($0)) }
+        }
+    }
+    
     public func unmuteAllTargetPaths(completion: @escaping (Error?) -> Void) {
         remoteObjectProxy(completion)?.unmuteAllTargetPaths(reply: completion)
     }
@@ -160,7 +172,7 @@ public class ESXPCClient {
         _connection.remoteObjectProxy { errorHandler(.failure($0)) }
     }
     
-    private func remoteObjectProxy(_ errorHandler: @escaping (Error?) -> Void) -> ESClientXPCProtocol? {
+    private func remoteObjectProxy(_ errorHandler: @escaping (Error) -> Void) -> ESClientXPCProtocol? {
         _connection.remoteObjectProxy { errorHandler($0) }
     }
 
@@ -170,7 +182,7 @@ public class ESXPCClient {
     
     private func withEncodedMute<Mute: Encodable>(
         _ mute: Mute, events: ESEventSet,
-        actionName: String, reply: @escaping (Error?) -> Void,
+        actionName: String, reply: @escaping (Error) -> Void,
         body: @escaping (ESClientXPCProtocol, _ mute: Data, _ events: Data) -> Void
     ) {
         guard let proxy = remoteObjectProxy(reply) else { return }

@@ -207,9 +207,32 @@ public class ESClient {
         mutePath.unmuteAll()
     }
     
+    /// Suppress a subset of events matching an event target path. Works only for macOS 13.0+.
+    /// - Parameters:
+    ///     - targetPath: path to be muted.
+    ///     - type: mute type.
+    ///     - events: set of events to mute.
+    public func muteTargetPath(_ targetPath: String, type muteType: ESMutePathType, events: ESEventSet = .all) -> Bool {
+        guard #available(macOS 13.0, *) else { return false }
+        return client.esMutePathEvents(targetPath, muteType.targetPath, Array(events.events)) == ES_RETURN_SUCCESS
+    }
+    
+    /// Unmute events of events matching an event target path. Works only for macOS 13.0+.
+    /// - Parameters:
+    ///     - targetPath: path to be unmuted.
+    ///     - type: mute type.
+    ///     - events: set of events to unmute.
+    public func unmuteTargetPath(_ targetPath: String, type muteType: ESMutePathType, events: ESEventSet = .all) -> Bool {
+        guard #available(macOS 13.0, *) else { return false }
+        return client.esUnmutePathEvents(targetPath, muteType.targetPath, Array(events.events)) == ES_RETURN_SUCCESS
+    }
+    
     /// Unmute all target paths. Works only for macOS 13.0+.
     public func unmuteAllTargetPaths() {
-        mutePath.unmuteAllTarget()
+        guard #available(macOS 13.0, *) else { return }
+        if client.esUnmuteAllTargetPaths() != ES_RETURN_SUCCESS {
+            log.warning("Failed to unmute all paths")
+        }
     }
     
     /// Invert the mute state of a given mute dimension. Works only for macOS 13.0+.
