@@ -48,7 +48,7 @@ public struct ESClientCreateError: Error, Codable {
 }
 
 extension ESAuthResolution {
-    static func combine(_ resolutions: [ESAuthResolution]) -> ESAuthResolution {
+    public static func combine(_ resolutions: [ESAuthResolution]) -> ESAuthResolution {
         guard let first = resolutions.first else { return .allowOnce }
         guard resolutions.count > 1 else { return first }
         
@@ -64,22 +64,24 @@ public struct ESEventSet: Equatable, Codable {
 }
 
 extension ESEventSet {
+    public init(events: [es_event_type_t]) {
+        self.init(events: Set(events))
+    }
+}
+
+extension ESEventSet: ExpressibleByArrayLiteral {
+    public init(arrayLiteral elements: es_event_type_t...) {
+        self.init(events: Set(elements))
+    }
+}
+
+extension ESEventSet {
     public static let empty = ESEventSet(events: [])
     public static let all = ESEventSet(events: (0..<ES_EVENT_TYPE_LAST.rawValue).map(es_event_type_t.init(rawValue:)))
 }
 
 extension ESEventSet {
     public func reverted() -> ESEventSet { ESEventSet(events: ESEventSet.all.events.subtracting(events)) }
-}
-
-extension ESEventSet: ExpressibleByArrayLiteral {
-    public init(arrayLiteral elements: es_event_type_t...) {
-        self.events = Set(elements)
-    }
-    
-    public init(events: [es_event_type_t]) {
-        self.init(events: Set(events))
-    }
 }
 
 public struct ESMuteResolution: Equatable, Codable {
