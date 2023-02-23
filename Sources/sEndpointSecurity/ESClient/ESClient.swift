@@ -151,6 +151,7 @@ public class ESClient {
     ///
     /// - Note: Mute resolutions are cached to avoid often handler calls.
     /// To reset cache, call `clearProcessMuteHandlerCache`.
+    /// - Note: Behaviour when handler not set equals to returning `ESMuteResolution.allowAll`.
     ///
     /// - Warning: Perfonamce-sensitive handler, called **synchronously** for each process on `eventQueue`.
     /// Do here as minimum work as possible.
@@ -298,13 +299,13 @@ public class ESClient {
         }
         
         let process = converter.esProcess(message.process)
-        let filterResolution = processMuteHandler?(process)
+        let filterResolution = processMuteHandler?(process) ?? .allowAll
         
         let isMutedByPath = mutePath.checkMuted(
-            process, event: message.event_type, additionalyMuted: filterResolution?.mutePathEvents ?? .empty
+            process, event: message.event_type, additionalyMuted: filterResolution.mutePathEvents
         )
         let isMutedByProcess = muteProcess.checkMuted(
-            process, event: message.event_type, additionalyMuted: filterResolution?.muteProcessEvents ?? .empty
+            process, event: message.event_type, additionalyMuted: filterResolution.muteProcessEvents
         )
         
         return isMutedByPath || isMutedByProcess

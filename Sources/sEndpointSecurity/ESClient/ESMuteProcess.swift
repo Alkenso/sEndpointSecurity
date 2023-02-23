@@ -84,7 +84,7 @@ internal class ESMuteProcess {
         }
     }
     
-    func checkMuted(_ process: ESProcess, event: es_event_type_t, additionalyMuted: ESEventSet) -> Bool {
+    func checkMuted(_ process: ESProcess, event: es_event_type_t, additionalyMuted: ESEventSet?) -> Bool {
         os_unfair_lock_lock(&cacheLock)
         defer { os_unfair_lock_unlock(&cacheLock) }
         
@@ -92,23 +92,15 @@ internal class ESMuteProcess {
             return mutedEvents.events.contains(event)
         }
         
-        let mutedEvents = mutedEvents(for: process, additionalyMuted: additionalyMuted)
-        if !mutedEvents.events.isEmpty {
-            muteNative(process.auditToken, events: mutedEvents)
+        let mutedEvents = (muteRules[process.auditToken]?.events ?? []).union(additionalyMuted?.events ?? [])
+        if additionalyMuted != nil {
+            if !mutedEvents.isEmpty {
+                muteNative(process.auditToken, events: ESEventSet(events: mutedEvents))
+            }
+            cache[process.auditToken] = ESEventSet(events: mutedEvents)
         }
-        cache[process.auditToken] = mutedEvents
         
-        return mutedEvents.events.contains(event)
-    }
-    
-    private func mutedEvents(for process: ESProcess, additionalyMuted: ESEventSet) -> ESEventSet {
-        var events: Set<es_event_type_t> = []
-        if let ruleEvents = muteRules[process.auditToken] {
-            events.formUnion(ruleEvents.events)
-        }
-        events.formUnion(additionalyMuted.events)
-        
-        return ESEventSet(events: events)
+        return mutedEvents.contains(event)
     }
     
     // MARK: Mute management

@@ -62,30 +62,27 @@ internal class ESMutePath {
         }
     }
     
-    func checkMuted(_ process: ESProcess, event: es_event_type_t, additionalyMuted: ESEventSet) -> Bool {
+    func checkMuted(_ process: ESProcess, event: es_event_type_t, additionalyMuted: ESEventSet?) -> Bool {
         os_unfair_lock_lock(&cacheLock)
         defer { os_unfair_lock_unlock(&cacheLock) }
         
-        if let mutedEvents = cache[process.executable.path] {
+        let path = process.executable.path
+        if let mutedEvents = cache[path] {
             return mutedEvents.events.contains(event)
         }
         
-        let mutedEvents = mutedEvents(for: process, additionalyMuted: additionalyMuted)
-        let path = process.executable.path
-        if !mutedEvents.events.isEmpty {
-            muteNative(.path(path, .literal), events: mutedEvents)
+        let mutedEvents = muteRules
+            .filter { $0.key.matches(process: process) }
+            .reduce(into: Set()) { $0.formUnion($1.value.events) }
+            .union(additionalyMuted?.events ?? [])
+        if additionalyMuted != nil {
+            if !mutedEvents.isEmpty {
+                muteNative(.path(path, .literal), events: ESEventSet(events: mutedEvents))
+            }
+            cache[path] = ESEventSet(events: mutedEvents)
         }
-        cache[path] = mutedEvents
         
-        return mutedEvents.events.contains(event)
-    }
-    
-    private func mutedEvents(for process: ESProcess, additionalyMuted: ESEventSet) -> ESEventSet {
-        var events: Set<es_event_type_t> = []
-        muteRules.filter { $0.key.matches(process: process) }.forEach { events.formUnion($0.value.events) }
-        events.formUnion(additionalyMuted.events)
-        
-        return ESEventSet(events: events)
+        return mutedEvents.contains(event)
     }
     
     // MARK: Mute management

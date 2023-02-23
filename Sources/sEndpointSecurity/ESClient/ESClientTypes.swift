@@ -81,7 +81,7 @@ extension ESEventSet {
 }
 
 extension ESEventSet {
-    public func reverted() -> ESEventSet { ESEventSet(events: ESEventSet.all.events.subtracting(events)) }
+    public func inverted() -> ESEventSet { ESEventSet(events: ESEventSet.all.events.subtracting(events)) }
 }
 
 public struct ESMuteResolution: Equatable, Codable {
@@ -104,12 +104,12 @@ extension ESMuteResolution {
 }
 
 extension ESMuteResolution {
-    internal var mutePathEvents: ESEventSet {
-        mutePath ? muteEvents : .empty
+    internal var mutePathEvents: ESEventSet? {
+        mutePath ? muteEvents : nil
     }
     
-    internal var muteProcessEvents: ESEventSet {
-        mutePath ? .empty : muteEvents
+    internal var muteProcessEvents: ESEventSet? {
+        mutePath ? nil : muteEvents
     }
 }
 
