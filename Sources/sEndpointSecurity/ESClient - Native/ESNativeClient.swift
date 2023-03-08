@@ -30,6 +30,7 @@ public protocol ESNativeClient {
     func esUnsubscribeAll() -> es_return_t
     
     func esClearCache() -> es_clear_cache_result_t
+    func esDeleteClient() -> es_return_t
     
     @available(macOS 13.0, *)
     func esInvertMuting(_ muteType: es_mute_inversion_type_t) -> es_return_t
@@ -41,13 +42,14 @@ public protocol ESNativeClient {
     
     func esMuteProcess(_ auditToken: audit_token_t) -> es_return_t
     func esUnmuteProcess(_ auditToken: audit_token_t) -> es_return_t
-    func esMutedProcesses() -> [audit_token_t]?
     
     @available(macOS 12.0, *)
     func esMuteProcessEvents(_ auditToken: audit_token_t, _ events: [es_event_type_t]) -> es_return_t
     
     @available(macOS 12.0, *)
     func esUnmuteProcessEvents(_ auditToken: audit_token_t, _ events: [es_event_type_t]) -> es_return_t
+    
+    func esMutedProcesses() -> [audit_token_t: [es_event_type_t]]
     
     // MARK: Mute by Path
     
@@ -66,6 +68,9 @@ public protocol ESNativeClient {
     
     @available(macOS 13.0, *)
     func esUnmuteAllTargetPaths() -> es_return_t
+    
+    @available(macOS 12.0, *)
+    func esMutedPaths() -> [(path: String, type: es_mute_path_type_t, events: [es_event_type_t])]
 }
 
 extension OpaquePointer: ESNativeClient {
@@ -93,6 +98,10 @@ extension OpaquePointer: ESNativeClient {
         es_clear_cache(self)
     }
     
+    public func esDeleteClient() -> es_return_t {
+        es_delete_client(self)
+    }
+    
     @available(macOS 13.0, *)
     public func esInvertMuting(_ muteType: es_mute_inversion_type_t) -> es_return_t {
         es_invert_muting(self, muteType)
@@ -115,22 +124,6 @@ extension OpaquePointer: ESNativeClient {
         withUnsafePointer(to: auditToken) { es_unmute_process(self, $0) }
     }
     
-    public func esMutedProcesses() -> [audit_token_t]? {
-        if #available(macOS 12.0, *) {
-            var processes: UnsafeMutablePointer<es_muted_processes_t>!
-            guard es_muted_processes_events(self, &processes) == ES_RETURN_SUCCESS else { return nil }
-            defer { es_release_muted_processes(processes) }
-            return Array(UnsafeBufferPointer(start: processes.pointee.processes, count: processes.pointee.count))
-                .map(\.audit_token)
-        } else {
-            var count: Int = 0
-            var tokens: UnsafeMutablePointer<audit_token_t>!
-            guard es_muted_processes(self, &count, &tokens) == ES_RETURN_SUCCESS else { return nil }
-            defer { tokens.deallocate() }
-            return Array(UnsafeBufferPointer(start: tokens, count: count))
-        }
-    }
-    
     @available(macOS 12.0, *)
     public func esMuteProcessEvents(_ auditToken: audit_token_t, _ events: [es_event_type_t]) -> es_return_t {
         withRawValues(events) { eventsPtr, eventsCount in
@@ -142,6 +135,25 @@ extension OpaquePointer: ESNativeClient {
     public func esUnmuteProcessEvents(_ auditToken: audit_token_t, _ events: [es_event_type_t]) -> es_return_t {
         withRawValues(events) { eventsPtr, eventsCount in
             withUnsafePointer(to: auditToken) { es_unmute_process_events(self, $0, eventsPtr, eventsCount) }
+        }
+    }
+    
+    public func esMutedProcesses() -> [audit_token_t: [es_event_type_t]] {
+        if #available(macOS 12.0, *) {
+            var processes: UnsafeMutablePointer<es_muted_processes_t>!
+            guard es_muted_processes_events(self, &processes) == ES_RETURN_SUCCESS else { return [:] }
+            defer { es_release_muted_processes(processes) }
+            return Array(UnsafeBufferPointer(start: processes.pointee.processes, count: processes.pointee.count))
+                .reduce(into: [:]) {
+                    $0[$1.audit_token] = Array(UnsafeBufferPointer(start: $1.events, count: $1.event_count))
+                }
+        } else {
+            var count: Int = 0
+            var tokens: UnsafeMutablePointer<audit_token_t>!
+            guard es_muted_processes(self, &count, &tokens) == ES_RETURN_SUCCESS else { return [:] }
+            defer { tokens.deallocate() }
+            return Array(UnsafeBufferPointer(start: tokens, count: count))
+                .reduce(into: [:]) { $0[$1] = Array(ESEventSet.all.events) }
         }
     }
     
@@ -186,6 +198,20 @@ extension OpaquePointer: ESNativeClient {
     @available(macOS 13.0, *)
     public func esUnmuteAllTargetPaths() -> es_return_t {
         es_unmute_all_target_paths(self)
+    }
+    
+    @available(macOS 12.0, *)
+    public func esMutedPaths() -> [(path: String, type: es_mute_path_type_t, events: [es_event_type_t])] {
+        var paths: UnsafeMutablePointer<es_muted_paths_t>!
+        guard es_muted_paths_events(self, &paths) == ES_RETURN_SUCCESS else { return [] }
+        defer { es_release_muted_paths(paths) }
+        
+        return Array(UnsafeBufferPointer(start: paths.pointee.paths, count: paths.pointee.count))
+            .map {
+                let events = Array(UnsafeBufferPointer(start: $0.events, count: $0.event_count))
+                let path = $0.path.length > 0 ? String(cString: $0.path.data) : ""
+                return (path, $0.type, events)
+            }
     }
     
     private func withRawValues<T, Count: BinaryInteger>(_ values: [T], body: (UnsafePointer<T>, Count) -> es_return_t) -> es_return_t {

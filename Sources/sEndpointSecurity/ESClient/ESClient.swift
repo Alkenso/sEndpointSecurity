@@ -28,24 +28,6 @@ import SwiftConvenience
 private let log = SCLogger.internalLog(.client)
 
 public class ESClient {
-    public var config = Config()
-    
-    /// Handler invoked each time AUTH message is coming from EndpointSecurity.
-    /// The message SHOULD be responded using the second parameter - reply block.
-    public var authMessageHandler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void) -> Void)?
-    
-    /// Handler invoked for each AUTH message after it has been responded.
-    /// Userful for statistic and post-actions.
-    public var postAuthMessageHandler: ((ESMessagePtr, ResponseInfo) -> Void)?
-    
-    /// Handler invoked each time NOTIFY message is coming from EndpointSecurity.
-    public var notifyMessageHandler: ((ESMessagePtr) -> Void)?
-    
-    /// Queue where `authMessageHandler`, `postAuthMessageHandler` and `notifyMessageHandler` handlers are called.
-    /// Defaults to serial, user-interactive queue.
-    /// `nil` means all handlers are called directly on native es_client queue.
-    public var queue: DispatchQueue? = DispatchQueue(label: "ESClient.queue", qos: .userInteractive)
-    
     /// Initialise a new ESClient and connect to the ES subsystem. No-throw version
     /// Subscribe to some set of events
     /// - Parameters:
@@ -62,15 +44,8 @@ public class ESClient {
     
     /// Initialise a new ESClient and connect to the ES subsystem
     /// - throws: ESClientCreateError in case of error
-    public init() throws {
-        do {
-            self.timebaseInfo = try mach_timebase_info.system()
-        } catch {
-            log.error("Failed to get timebase info: \(error)")
-            self.timebaseInfo = nil
-        }
-        
-        var client: OpaquePointer!
+    public convenience init() throws {
+        var client: OpaquePointer?
         weak var weakSelf: ESClient?
         let status = es_new_client(&client) { innerClient, rawMessage in
             if let self = weakSelf {
@@ -81,25 +56,65 @@ public class ESClient {
             }
         }
         
-        guard status == ES_NEW_CLIENT_RESULT_SUCCESS else {
+        try self.init(client: client, status: status)
+        weakSelf = self
+    }
+    
+    private init(client: ESNativeClient?, status: es_new_client_result_t) throws {
+        guard let client, status == ES_NEW_CLIENT_RESULT_SUCCESS else {
             throw ESClientCreateError(status: status)
         }
         
         self.client = client
-        self.mutePath = ESMutePath(client: client)
-        self.muteProcess = ESMuteProcess(client: client)
+        self.pathMutes = ESMutePath(client: client)
+        self.processMutes = ESMuteProcess(client: client)
         
-        weakSelf = self
+        do {
+            self.timebaseInfo = try mach_timebase_info.system()
+        } catch {
+            log.error("Failed to get timebase info: \(error)")
+            self.timebaseInfo = nil
+        }
+        
+        self.pathMutes.interestHandler = { [weak self] in
+            guard let self else { return .listen() }
+            return self.evaluateInterest(for: $0)
+        }
     }
     
     deinit {
-        if let client = client {
-            if client.esUnsubscribeAll() != ES_RETURN_SUCCESS {
-                log.warning("Failed to unsubscribeAll on ESClient.deinit")
-            }
-            es_delete_client(client)
+        if client.esUnsubscribeAll() != ES_RETURN_SUCCESS {
+            log.warning("Failed to unsubscribeAll on ESClient.deinit")
+        }
+        if client.esDeleteClient() != ES_RETURN_SUCCESS {
+            log.warning("Failed to deleteClient on ESClient.deinit")
         }
     }
+    
+    public var config = Config()
+    
+    /// Reference to `es_client_t` used under the hood.
+    /// DO NOT use it for modifyng any mutes/inversions/etc, the behaviour is undefined.
+    /// You may want to use it for informational purposes (list of mutes, etc).
+    public var unsafeNativeClient: ESNativeClient { client }
+    
+    // MARK: Messages
+    
+    /// Handler invoked each time AUTH message is coming from EndpointSecurity.
+    /// The message SHOULD be responded using the second parameter - reply block.
+    public var authMessageHandler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void) -> Void)?
+    
+    /// Handler invoked for each AUTH message after it has been responded.
+    /// Userful for statistic and post-actions.
+    public var postAuthMessageHandler: ((ESMessagePtr, ResponseInfo) -> Void)?
+    
+    /// Handler invoked each time NOTIFY message is coming from EndpointSecurity.
+    public var notifyMessageHandler: ((ESMessagePtr) -> Void)?
+    
+    /// Queue where `pathInterestHandler`, `authMessageHandler`, `postAuthMessageHandler`
+    /// and `notifyMessageHandler` handlers are called.
+    /// Defaults to `nil` that means all handlers are called directly on native `es_client` queue.
+    public var queue: DispatchQueue?
     
     /// Subscribe to some set of events
     /// - Parameters:
@@ -134,135 +149,155 @@ public class ESClient {
         client.esClearCache()
     }
     
-    // MARK: Mute
+    // MARK: Interest
     
-    /// Perform process filtering, additionally to mute path and process rules.
-    /// Designed to be used for granular process filtering.
+    /// Perform process filtering, additionally to muting of path and processes.
+    /// Filtering is based on `interest in particular process executable path`.
+    /// Designed to be used for granular process filtering by ignoring uninterest events.
     ///
-    /// The process may be muted and all related messages skipped accoding to returned `ESMuteResolution`.
+    /// General idea is to mute or ignore processes we are not interested in using their binary paths.
+    /// Usually the OS would not have more than ~1000 unique processes, so asking for interest in particular
+    /// process path would occur very limited number of times.
+    ///
+    /// The process may be interested or ignored accoding to returned `ESInterest`.
+    /// If the process is not interested, all related messages are skipped.
     /// More information on `ESMuteResolution` see in related documentation.
     ///
-    /// The final decision if the particular event is muted or not relies on multiple mute sources.
-    /// If at least one of above matches the message's `event_type`, the message is muted.
+    /// The final decision if the particular event is delivered or not relies on multiple sources.
     /// Sources considered:
     /// - `mutePath` rules
     /// - `muteProcess` rules
-    /// - `processMuteHandler` resolution
+    /// - `pathInterestHandler` resolution
+    /// - `pathInterestRules` rules
     ///
-    /// - Note: Mute resolutions are cached to avoid often handler calls.
-    /// To reset cache, call `clearProcessMuteHandlerCache`.
-    /// - Note: Behaviour when handler not set equals to returning `ESMuteResolution.allowAll`.
+    /// - Note: Interest does NOT depend on `inversion` of `ESClient`.
+    /// - Note: Returned resolutions are cached to avoid often handler calls.
+    /// To reset cache, call `clearPathInterestCache`.
+    /// - Note: When the handler is not set, it defaults to returning `ESInterest.listen()`.
     ///
-    /// - Warning: Perfonamce-sensitive handler, called **synchronously** for each process on `eventQueue`.
+    /// - Warning: Perfonamce-sensitive handler, called **synchronously** once for each process path on `queue`.
     /// Do here as minimum work as possible.
-    public var processMuteHandler: ((ESProcess) -> ESMuteResolution)?
+    @Atomic public var pathInterestHandler: ((ESProcess) -> ESInterest)?
     
-    /// Clears the cache related to process muting.
-    /// All processes will be re-evaluated against mute rules and `processMuteHandler`.
-    public func clearProcessMuteHandlerCache() {
-        mutePath.clearAdditionalMutes()
-        muteProcess.clearAdditionalMutes()
+    /// Perform process filtering, additionally to muting of path and processes.
+    /// For more information see `pathInterestHandler`.
+    @Atomic public var pathInterestRules: [ESPathInterestRule: ESInterest] = [:]
+    
+    /// Clears the cache related to process interest by path.
+    /// All processes will be re-evaluated against mute rules and `pathInterestHandler`.
+    public func clearPathInterestCache() {
+        pathMutes.clearIgnoreCache()
     }
+    
+    // MARK: Mute
     
     /// Suppress events from the process described by the given `mute` rule.
     /// - Parameters:
     ///     - mute: process to mute.
     ///     - events: set of events to mute.
-    public func muteProcess(_ mute: ESMuteProcessRule, events: ESEventSet = .all) {
-        guard let token = mute.token else { return }
-        muteProcess.mute(token, events: events)
+    public func muteProcess(_ rule: ESMuteProcessRule, events: ESEventSet = .all) {
+        guard let token = rule.token else { return }
+        processMutes.mute(token, events: events.events)
     }
     
     /// Unmute events for the process described by the given `mute` rule.
     /// - Parameters:
     ///     - mute: process to unmute.
     ///     - events: set of events to mute.
-    public func unmuteProcess(_ mute: ESMuteProcessRule, events: ESEventSet = .all) {
-        guard let token = mute.token else { return }
-        muteProcess.unmute(token, events: events)
+    public func unmuteProcess(_ rule: ESMuteProcessRule, events: ESEventSet = .all) {
+        guard let token = rule.token else { return }
+        processMutes.unmute(token, events: events.events)
     }
     
     /// Unmute all events for all processes. Clear the rules.
     public func unmuteAllProcesses() {
-        muteProcess.unmuteAll()
+        processMutes.unmuteAll()
     }
     
-    /// Suppress events for the process at path. Path is described by the `mute` rule.
+    /// Suppress events for the process at path.
     /// - Parameters:
     ///     - mute: process path to mute.
+    ///     - type: path type.
     ///     - events: set of events to mute.
-    public func mutePath(_ mute: ESMutePathRule, events: ESEventSet = .all) {
-        mutePath.mute(mute, events: events)
+    public func mutePath(_ path: String, type: ESMutePathType, events: ESEventSet = .all) {
+        pathMutes.mute(path, type: type, events: events.events)
     }
     
-    /// Unmute events for the process at path. Path is described by the `mute` rule.
+    /// Unmute events for the process at path.
     /// - Parameters:
     ///     - mute: process path to unmute.
+    ///     - type: path type.
     ///     - events: set of events to unmute.
-    public func unmutePath(_ mute: ESMutePathRule, events: ESEventSet = .all) {
-        mutePath.unmute(mute, events: events)
+    @available(macOS 12.0, *)
+    public func unmutePath(_ path: String, type: ESMutePathType, events: ESEventSet = .all) {
+        pathMutes.unmute(path, type: type, events: events.events)
     }
     
-    /// Unmute all events for all process paths. Clear the rules.
+    /// Unmute all events for all process paths.
     public func unmuteAllPaths() {
-        mutePath.unmuteAll()
+        pathMutes.unmuteAll()
     }
     
-    /// Suppress a subset of events matching an event target path. Works only for macOS 13.0+.
+    /// Suppress a subset of events matching an event target path.
     /// - Parameters:
     ///     - targetPath: path to be muted.
     ///     - type: mute type.
     ///     - events: set of events to mute.
+    @available(macOS 13.0, *)
     public func muteTargetPath(_ targetPath: String, type muteType: ESMutePathType, events: ESEventSet = .all) -> Bool {
-        guard #available(macOS 13.0, *) else { return false }
         return client.esMutePathEvents(targetPath, muteType.targetPath, Array(events.events)) == ES_RETURN_SUCCESS
     }
     
-    /// Unmute events of events matching an event target path. Works only for macOS 13.0+.
+    /// Unmute events of events matching an event target path.
     /// - Parameters:
     ///     - targetPath: path to be unmuted.
     ///     - type: mute type.
     ///     - events: set of events to unmute.
+    @available(macOS 13.0, *)
     public func unmuteTargetPath(_ targetPath: String, type muteType: ESMutePathType, events: ESEventSet = .all) -> Bool {
-        guard #available(macOS 13.0, *) else { return false }
         return client.esUnmutePathEvents(targetPath, muteType.targetPath, Array(events.events)) == ES_RETURN_SUCCESS
     }
     
     /// Unmute all target paths. Works only for macOS 13.0+.
+    @available(macOS 13.0, *)
     public func unmuteAllTargetPaths() {
-        guard #available(macOS 13.0, *) else { return }
         if client.esUnmuteAllTargetPaths() != ES_RETURN_SUCCESS {
             log.warning("Failed to unmute all paths")
         }
     }
     
-    /// Invert the mute state of a given mute dimension. Works only for macOS 13.0+.
+    /// Invert the mute state of a given mute dimension.
+    @available(macOS 13.0, *)
     public func invertMuting(_ muteType: es_mute_inversion_type_t) -> Bool {
-        guard #available(macOS 13.0, *) else { return false }
-        return client.esInvertMuting(muteType) == ES_RETURN_SUCCESS
+        switch muteType {
+        case ES_MUTE_INVERSION_TYPE_PROCESS:
+            return processMutes.invertMuting()
+        case ES_MUTE_INVERSION_TYPE_PATH:
+            return pathMutes.invertMuting()
+        default:
+            return client.esInvertMuting(muteType) == ES_RETURN_SUCCESS
+        }
     }
     
-    /// Mute state of a given mute dimension. Works only for macOS 13.0+.
-    public func mutingInverted(_ muteType: es_mute_inversion_type_t) -> Bool? {
-        guard #available(macOS 13.0, *) else { return false }
-        
+    /// Mute state of a given mute dimension.
+    @available(macOS 13.0, *)
+    public func mutingInverted(_ muteType: es_mute_inversion_type_t) -> Bool {
         switch client.esMutingInverted(muteType) {
         case ES_MUTE_INVERTED: return true
         case ES_MUTE_NOT_INVERTED: return false
-        case ES_MUTE_INVERTED_ERROR: return nil
-        default: return nil
+        case ES_MUTE_INVERTED_ERROR: return false
+        default: return false
         }
     }
     
     // MARK: Private
-    
-    private var client: OpaquePointer!
+    private var client: ESNativeClient
+    private let pathMutes: ESMutePath
+    private let processMutes: ESMuteProcess
     private let timebaseInfo: mach_timebase_info?
-    private let mutePath: ESMutePath
-    private let muteProcess: ESMuteProcess
     
     private func handleMessage(_ message: ESMessagePtr) {
-        let isMuted = checkMuted(message)
+        let isMuted = checkIgnored(message)
         switch message.action_type {
         case ES_ACTION_TYPE_AUTH:
             guard let authMessageHandler = authMessageHandler, !isMuted else {
@@ -287,28 +322,18 @@ public class ESClient {
         }
     }
     
-    private func checkMuted(_ message: ESMessagePtr) -> Bool {
+    private func checkIgnored(_ message: ESMessagePtr) -> Bool {
+        let event = message.event_type
         let converter = ESConverter(version: message.version)
+        
         let path = converter.esString(message.process.pointee.executable.pointee.path)
         let token = message.process.pointee.audit_token
-        let event = message.event_type
+        lazy var process = converter.esProcess(message.process.pointee)
         
-        if let isMutedByPath = mutePath.checkMutedByCache(path, event: event),
-           let isMutedByProcess = muteProcess.checkMutedByCache(token, event: event) {
-            return isMutedByPath || isMutedByProcess
-        }
+        guard !pathMutes.checkIgnored(event, path: path, process: process) else { return true }
+        guard !processMutes.checkMuted(event, process: token) else { return true }
         
-        let process = converter.esProcess(message.process)
-        let filterResolution = processMuteHandler?(process) ?? .allowAll
-        
-        let isMutedByPath = mutePath.checkMuted(
-            process, event: message.event_type, additionalyMuted: filterResolution.mutePathEvents
-        )
-        let isMutedByProcess = muteProcess.checkMuted(
-            process, event: message.event_type, additionalyMuted: filterResolution.muteProcessEvents
-        )
-        
-        return isMutedByPath || isMutedByProcess
+        return false
     }
     
     private func respond(_ message: ESMessagePtr, resolution: ESAuthResolution, reason: ResponseReason, timeoutItem: DispatchWorkItem? = nil) {
@@ -324,12 +349,12 @@ public class ESClient {
     }
     
     private func scheduleCancel(for message: ESMessagePtr, cancellation: @escaping () -> Void) -> DispatchWorkItem? {
-        guard let timebaseInfo = timebaseInfo else { return nil }
+        guard let timebaseInfo, let messageTimeout = config.messageTimeout else { return nil }
         let machInterval = message.deadline - message.mach_time
         let fullInterval = TimeInterval(machTime: machInterval, timebase: timebaseInfo)
         
         let interval: TimeInterval
-        switch config.messageTimeout {
+        switch messageTimeout {
         case .seconds(let seconds):
             interval = min(seconds, fullInterval)
         case .ratio(let ratio):
@@ -341,11 +366,21 @@ public class ESClient {
         
         return item
     }
+    
+    private func evaluateInterest(for process: ESProcess) -> ESInterest {
+        var interests = pathInterestRules.filter { $0.key.matches(process: process) }.map(\.value)
+        if let pathInterestHandler {
+            interests.append(queue.sync { pathInterestHandler(process) })
+        }
+        
+        return .combine(config.pathInterestRulesCombineType, interests) ?? .listen()
+    }
 }
 
 extension ESClient {
     public struct Config: Equatable, Codable {
-        public var messageTimeout: MessageTimeout = .ratio(0.5)
+        public var messageTimeout: MessageTimeout?
+        public var pathInterestRulesCombineType: ESInterest.CombineType = .restrictive
         
         public enum MessageTimeout: Equatable, Codable {
             case ratio(Double) // 0...1.0
@@ -374,18 +409,59 @@ extension ESClient {
     }
 }
 
-private extension Optional where Wrapped == DispatchQueue {
+extension Optional where Wrapped == DispatchQueue {
     @inline(__always)
-    func async(execute work: @escaping () -> Void) {
-        if let self = self {
+    fileprivate func async(execute work: @escaping () -> Void) {
+        if let self {
             self.async(execute: work)
         } else {
             work()
         }
     }
+    
+    @inline(__always)
+    fileprivate func sync<R>(execute work: () -> R) -> R {
+        if let self {
+            return self.sync(execute: work)
+        } else {
+            return work()
+        }
+    }
 }
 
-private struct ExecutableID: Hashable {
-    var path: String
-    var cdHash: Data
+extension ESClient {
+    /// For testing purposes only.
+    internal static func test(newClient: (inout ESNativeClient?, @escaping es_handler_block_t) -> es_new_client_result_t) throws -> ESClient {
+        var native: ESNativeClient?
+        weak var weakSelf: ESClient?
+        let status = newClient(&native) { innerClient, rawMessage in
+            if let self = weakSelf {
+                let message = ESMessagePtr(unowned: rawMessage)
+                self.handleMessage(message)
+            } else {
+                fatalError("ESClient.test if nil")
+            }
+        }
+        
+        let client = try ESClient(client: native, status: status)
+        weakSelf = client
+        
+        return client
+    }
+}
+
+extension ESMuteProcessRule {
+    fileprivate var token: audit_token_t? {
+        switch self {
+        case .token(let token):
+            return token
+        case .pid(let pid):
+            do {
+                return try audit_token_t(pid: pid)
+            } catch {
+                log.warning("Failed to get auditToken for pid = \(pid)")
+                return nil
+            }
+        }
+    }
 }

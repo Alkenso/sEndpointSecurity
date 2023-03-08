@@ -24,8 +24,6 @@ import EndpointSecurity
 import Foundation
 import SwiftConvenience
 
-private let log = SCLogger.internalLog(.client)
-
 public struct ESAuthResolution: Equatable, Codable {
     public var result: ESAuthResult
     public var cache: Bool
@@ -48,6 +46,9 @@ public struct ESClientCreateError: Error, Codable {
 }
 
 extension ESAuthResolution {
+    /// Restrictive combine of multiple `ESAuthResolution` values.
+    ///
+    /// Deny has precedence over allow. Non-cache has precedence over cache.
     public static func combine(_ resolutions: [ESAuthResolution]) -> ESAuthResolution {
         guard let first = resolutions.first else { return .allowOnce }
         guard resolutions.count > 1 else { return first }
@@ -84,32 +85,52 @@ extension ESEventSet {
     public func inverted() -> ESEventSet { ESEventSet(events: ESEventSet.all.events.subtracting(events)) }
 }
 
-public struct ESMuteResolution: Equatable, Codable {
-    public var muteEvents: ESEventSet
-    public var mutePath: Bool
+public struct ESInterest: Equatable, Codable {
+    public var events: Set<es_event_type_t>
+    public internal(set) var nativeMuteIgnored = false
 }
 
-extension ESMuteResolution {
-    /// Do NOT mute process events. Events are NOT muted only for current instance of related process.
-    public static let allowThis = ESMuteResolution(muteEvents: .empty, mutePath: false)
-    
-    /// Do NOT mute process events. Events are NOT muted for all instances of related process.
-    public static let allowAll = ESMuteResolution(muteEvents: .empty, mutePath: true)
-    
-    /// Mute set of events. Events ARE muted only for current instance of related process.
-    public static func muteThis(_ events: ESEventSet) -> ESMuteResolution { .init(muteEvents: events, mutePath: false) }
-    
-    /// Mute set of events. Events ARE muted for all instances of related process.
-    public static func muteAll(_ events: ESEventSet) -> ESMuteResolution { .init(muteEvents: events, mutePath: true) }
-}
-
-extension ESMuteResolution {
-    internal var mutePathEvents: ESEventSet? {
-        mutePath ? muteEvents : nil
+extension ESInterest {
+    public static func listen(_ events: ESEventSet = .all) -> ESInterest {
+        ESInterest(events: events.events)
     }
     
-    internal var muteProcessEvents: ESEventSet? {
-        mutePath ? nil : muteEvents
+    public static func ignore(_ events: ESEventSet = .all) -> ESInterest {
+        ESInterest(events: events.inverted().events)
+    }
+    
+    /// Ignore set of events.
+    /// Additionally performs native muting of the path literal / process.
+    /// - Warning: muting natively too many paths or processes (200+) may cause performance degradation
+    /// because of implementation specifics of `es_client` on some versions of macOS.
+    @available(macOS 12.0, *)
+    public static func ignore(_ events: ESEventSet, suggestNativeMuting: Bool) -> ESInterest {
+        ESInterest(events: events.inverted().events, nativeMuteIgnored: suggestNativeMuting)
+    }
+}
+
+extension ESInterest {
+    public static func combine(_ type: CombineType, _ resolutions: [ESInterest]) -> ESInterest? {
+        guard let first = resolutions.first else { return nil }
+        guard resolutions.count > 1 else { return first }
+        
+        let events = resolutions.dropFirst().reduce(into: first.events) {
+            switch type {
+            case .restrictive: $0.formIntersection($1.events)
+            case .permissive: $0.formUnion($1.events)
+            }
+        }
+        let nativeMute = resolutions.map(\.nativeMuteIgnored).reduce(true) { $0 && $1 }
+        
+        return ESInterest(events: events, nativeMuteIgnored: nativeMute)
+    }
+    
+    public enum CombineType: Equatable, Codable {
+        /// Interest in intersection of events in resolutions.
+        case restrictive
+        
+        /// Interest in union of events in resolutions.
+        case permissive
     }
 }
 
@@ -119,7 +140,7 @@ public enum ESMutePathType: Hashable, Codable {
 }
 
 extension ESMutePathType {
-    public var process: es_mute_path_type_t {
+    public var path: es_mute_path_type_t {
         switch self {
         case .prefix: return ES_MUTE_PATH_TYPE_PREFIX
         case .literal: return ES_MUTE_PATH_TYPE_LITERAL
@@ -132,6 +153,24 @@ extension ESMutePathType {
         case .literal: return ES_MUTE_PATH_TYPE_TARGET_LITERAL
         }
     }
+}
+
+public enum ESPathInterestRule: Hashable, Codable {
+    case path(String, ESMutePathType)
+    
+    /// Matches on process name.
+    case name(String, ESMutePathType)
+
+    ///  Codesign Team Identifier (DEVELOPMENT_TEAM in Xcode).
+    case teamID(String)
+
+    ///  Usually equals to application bundle identifier.
+    case signingID(String)
+}
+
+public enum ESMuteProcessRule: Hashable, Codable {
+    case token(audit_token_t)
+    case pid(pid_t)
 }
 
 public struct ESReturnError: Error {

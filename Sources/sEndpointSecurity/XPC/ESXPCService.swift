@@ -224,8 +224,12 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
             from: mute, type: ESMutePathRule.self, events: events,
             actionName: "unmute path", reply: reply
         ) { client, mute, events in
-            client.unmutePath(mute, events: events)
-            return true
+            if #available(macOS 12.0, *) {
+                client.unmutePath(mute, events: events)
+                return true
+            } else {
+                return false
+            }
         }
     }
     
@@ -254,14 +258,20 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
             from: muteType, type: ESMutePathType.self, events: events,
             actionName: "unmuteTargetPath", reply: { completion($0 == nil) }
         ) { client, mute, events in
-            client.unmuteTargetPath(targetPath, type: mute)
+            if #available(macOS 13.0, *) {
+                return client.unmuteTargetPath(targetPath, type: mute)
+            } else {
+                return false
+            }
         }
     }
     
     func unmuteAllTargetPaths(reply: @escaping (Error?) -> Void) {
         do {
             let client = try _client.get(name: "ESClient")
-            client.unmuteAllTargetPaths()
+            if #available(macOS 13.0, *) {
+                client.unmuteAllTargetPaths()
+            }
             reply(nil)
         } catch {
             log.error("Failed to unmuteAllPaths. Error: \(error)")
@@ -270,13 +280,21 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
     }
     
     func invertMuting(_ muteType: es_mute_inversion_type_t, completion: @escaping (Bool) -> Void) {
-        let result = _client?.invertMuting(muteType) ?? false
-        completion(result)
+        if #available(macOS 13.0, *) {
+            let result = _client?.invertMuting(muteType) ?? false
+            completion(result)
+        } else {
+            completion(false)
+        }
     }
     
     func mutingInverted(_ muteType: es_mute_inversion_type_t, completion: @escaping (Int) -> Void) {
-        let result = _client?.mutingInverted(muteType)
-        completion(result.flatMap { $0 ? 1 : 0 } ?? -1)
+        if #available(macOS 13.0, *) {
+            let result = _client?.mutingInverted(muteType)
+            completion(result.flatMap { $0 ? 1 : 0 } ?? -1)
+        } else {
+            completion(-1)
+        }
     }
 
     func custom(id: UUID, payload: Data, isReply: Bool, reply: @escaping () -> Void) {
