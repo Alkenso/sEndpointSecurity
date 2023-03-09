@@ -1,6 +1,6 @@
 //  MIT License
 //
-//  Copyright (c) 2022 Alkenso (Vladimir Vashurkin)
+//  Copyright (c) 2023 Alkenso (Vladimir Vashurkin)
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to deal
@@ -21,21 +21,23 @@
 //  SOFTWARE.
 
 import Foundation
-import SwiftConvenience
 
-public enum sEndpointSecurityLogSubsystem: String, SCLogSubsystem {
-    case client = "ESClient"
-    case xpc = "ESXPC"
-}
-
-extension sEndpointSecurityLogSubsystem: CustomStringConvertible {
-    public var description: String {
-        "sEndpointSecurity.\(rawValue)"
+extension Optional where Wrapped == DispatchQueue {
+    @inline(__always)
+    internal func async(execute work: @escaping () -> Void) {
+        if let self {
+            self.async(execute: work)
+        } else {
+            work()
+        }
     }
-}
-
-extension SCLog {
-    static func internalLog(_ subsystem: sEndpointSecurityLogSubsystem) -> SCLog {
-        SCLogger.default.withSubsystem(subsystem)
+    
+    @inline(__always)
+    internal func sync<R>(execute work: () -> R) -> R {
+        if let self {
+            return self.sync(execute: work)
+        } else {
+            return work()
+        }
     }
 }

@@ -24,16 +24,16 @@ import EndpointSecurity
 import Foundation
 import SwiftConvenience
 
-private let log = SCLogger.internalLog(.xpcCommunication)
+private let log = SCLogger.internalLog(.xpc)
 
-class ESXPCConnection {
+internal class ESXPCConnection {
     typealias ConnectResult = Result<es_new_client_result_t, Error>
     var connectionStateHandler: ((ConnectResult) -> Void)?
     
     var converterConfig: ESConverter.Config = .default
     
     init(delegate: ESClientXPCDelegateProtocol, createConnection: @escaping () -> NSXPCConnection) {
-        self._delegate = delegate
+        self.delegate = delegate
         
         let prepareConnection = { () -> NSXPCConnection in
             let connection = createConnection()
@@ -41,12 +41,12 @@ class ESXPCConnection {
             connection.exportedInterface = .esClientDelegate
             return connection
         }
-        self._createConnection = prepareConnection
+        self.createConnection = prepareConnection
         
         let dummyConnection = prepareConnection()
         dummyConnection.resume()
         dummyConnection.invalidate()
-        self._xpcConnection = dummyConnection
+        self.xpcConnection = dummyConnection
     }
     
     func connect(async: Bool, notify: ((ConnectResult) -> Void)?) {
@@ -58,8 +58,8 @@ class ESXPCConnection {
             return
         }
         
-        let connection = _createConnection()
-        connection.exportedObject = _delegate
+        let connection = createConnection()
+        connection.exportedObject = delegate
         connection.resume()
         
         let remoteObject = (async ? connection.remoteObjectProxyWithErrorHandler : connection.synchronousRemoteObjectProxyWithErrorHandler) { [weak self] in
@@ -77,7 +77,7 @@ class ESXPCConnection {
     }
     
     func remoteObjectProxy(_ errorHandler: @escaping (Error) -> Void) -> ESClientXPCProtocol? {
-        let remoteObject = _xpcConnection.remoteObjectProxyWithErrorHandler {
+        let remoteObject = xpcConnection.remoteObjectProxyWithErrorHandler {
             errorHandler($0)
         }
         guard let proxy = remoteObject as? ESClientXPCProtocol else {
@@ -89,19 +89,19 @@ class ESXPCConnection {
     }
     
     func invalidate() {
-        _reconnectOnFailure = false
-        _xpcConnection.invalidate()
+        reconnectOnFailure = false
+        xpcConnection.invalidate()
     }
     
     // MARK: Private
 
-    private let _delegate: ESClientXPCDelegateProtocol
-    private let _createConnection: () -> NSXPCConnection
-    @Atomic private var _xpcConnection: NSXPCConnection
-    @Atomic private var _reconnectOnFailure = true
+    private let delegate: ESClientXPCDelegateProtocol
+    private let createConnection: () -> NSXPCConnection
+    @Atomic private var xpcConnection: NSXPCConnection
+    @Atomic private var reconnectOnFailure = true
     
     private func reconnect() {
-        guard _reconnectOnFailure else { return }
+        guard reconnectOnFailure else { return }
         connect(async: true, notify: nil)
     }
 
@@ -118,7 +118,9 @@ class ESXPCConnection {
         guard let value = result.success, value.result == ES_NEW_CLIENT_RESULT_SUCCESS else {
             log.error("Connect failed with result = \(result)")
             result.success?.connection.invalidate()
-            scheduleReconnect()
+            if notify == nil {
+                scheduleReconnect()
+            }
             return
         }
         
@@ -126,7 +128,8 @@ class ESXPCConnection {
             log.warning("ESXPC connection invalidated")
             
             connection?.invalidationHandler = nil
-            self?.reconnect()
+            self?.connectionStateHandler?(.failure(CocoaError(.xpcConnectionInterrupted)))
+            self?.scheduleReconnect()
         }
         value.connection.interruptionHandler = { [weak connection = value.connection] in
             log.warning("ESXPC connection interrupted. Invalidating...")
@@ -135,7 +138,7 @@ class ESXPCConnection {
             connection?.invalidate()
         }
         
-        _xpcConnection = value.connection
+        xpcConnection = value.connection
     }
 
     private func scheduleReconnect() {

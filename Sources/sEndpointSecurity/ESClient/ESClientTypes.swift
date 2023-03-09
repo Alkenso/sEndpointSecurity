@@ -134,40 +134,6 @@ extension ESInterest {
     }
 }
 
-public enum ESMutePathType: Hashable, Codable {
-    case prefix
-    case literal
-}
-
-extension ESMutePathType {
-    public var path: es_mute_path_type_t {
-        switch self {
-        case .prefix: return ES_MUTE_PATH_TYPE_PREFIX
-        case .literal: return ES_MUTE_PATH_TYPE_LITERAL
-        }
-    }
-    
-    public var targetPath: es_mute_path_type_t {
-        switch self {
-        case .prefix: return ES_MUTE_PATH_TYPE_TARGET_PREFIX
-        case .literal: return ES_MUTE_PATH_TYPE_TARGET_LITERAL
-        }
-    }
-}
-
-public enum ESPathInterestRule: Hashable, Codable {
-    case path(String, ESMutePathType)
-    
-    /// Matches on process name.
-    case name(String, ESMutePathType)
-
-    ///  Codesign Team Identifier (DEVELOPMENT_TEAM in Xcode).
-    case teamID(String)
-
-    ///  Usually equals to application bundle identifier.
-    case signingID(String)
-}
-
 public enum ESMuteProcessRule: Hashable, Codable {
     case token(audit_token_t)
     case pid(pid_t)

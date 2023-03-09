@@ -76,9 +76,9 @@ public class ESClient {
             self.timebaseInfo = nil
         }
         
-        self.pathMutes.interestHandler = { [weak self] in
+        self.pathMutes.interestHandler = { [weak self] process in
             guard let self else { return .listen() }
-            return self.evaluateInterest(for: $0)
+            return self.queue.sync { self.pathInterestHandler?(process) ?? .listen() }
         }
     }
     
@@ -177,11 +177,7 @@ public class ESClient {
     ///
     /// - Warning: Perfonamce-sensitive handler, called **synchronously** once for each process path on `queue`.
     /// Do here as minimum work as possible.
-    @Atomic public var pathInterestHandler: ((ESProcess) -> ESInterest)?
-    
-    /// Perform process filtering, additionally to muting of path and processes.
-    /// For more information see `pathInterestHandler`.
-    @Atomic public var pathInterestRules: [ESPathInterestRule: ESInterest] = [:]
+    public var pathInterestHandler: ((ESProcess) -> ESInterest)?
     
     /// Clears the cache related to process interest by path.
     /// All processes will be re-evaluated against mute rules and `pathInterestHandler`.
@@ -214,56 +210,51 @@ public class ESClient {
         processMutes.unmuteAll()
     }
     
-    /// Suppress events for the process at path.
+    /// Suppress events for the the given at path and type.
     /// - Parameters:
     ///     - mute: process path to mute.
     ///     - type: path type.
     ///     - events: set of events to mute.
-    public func mutePath(_ path: String, type: ESMutePathType, events: ESEventSet = .all) {
-        pathMutes.mute(path, type: type, events: events.events)
+    public func mutePath(_ path: String, type: es_mute_path_type_t, events: ESEventSet = .all) -> Bool {
+        switch type {
+        case ES_MUTE_PATH_TYPE_PREFIX, ES_MUTE_PATH_TYPE_LITERAL:
+            pathMutes.mute(path, type: type, events: events.events)
+            return true
+        default:
+            if #available(macOS 12.0, *) {
+                return client.esMutePathEvents(path, type, Array(events.events)) == ES_RETURN_SUCCESS
+            } else {
+                return false
+            }
+        }
     }
     
-    /// Unmute events for the process at path.
+    /// Unmute events for the given at path and type.
     /// - Parameters:
     ///     - mute: process path to unmute.
     ///     - type: path type.
     ///     - events: set of events to unmute.
     @available(macOS 12.0, *)
-    public func unmutePath(_ path: String, type: ESMutePathType, events: ESEventSet = .all) {
-        pathMutes.unmute(path, type: type, events: events.events)
+    public func unmutePath(_ path: String, type: es_mute_path_type_t, events: ESEventSet = .all) -> Bool {
+        switch type {
+        case ES_MUTE_PATH_TYPE_PREFIX, ES_MUTE_PATH_TYPE_LITERAL:
+            pathMutes.unmute(path, type: type, events: events.events)
+            return true
+        default:
+            return client.esUnmutePathEvents(path, type, Array(events.events)) == ES_RETURN_SUCCESS
+        }
+        
     }
     
     /// Unmute all events for all process paths.
-    public func unmuteAllPaths() {
+    public func unmuteAllPaths() -> Bool {
         pathMutes.unmuteAll()
-    }
-    
-    /// Suppress a subset of events matching an event target path.
-    /// - Parameters:
-    ///     - targetPath: path to be muted.
-    ///     - type: mute type.
-    ///     - events: set of events to mute.
-    @available(macOS 13.0, *)
-    public func muteTargetPath(_ targetPath: String, type muteType: ESMutePathType, events: ESEventSet = .all) -> Bool {
-        return client.esMutePathEvents(targetPath, muteType.targetPath, Array(events.events)) == ES_RETURN_SUCCESS
-    }
-    
-    /// Unmute events of events matching an event target path.
-    /// - Parameters:
-    ///     - targetPath: path to be unmuted.
-    ///     - type: mute type.
-    ///     - events: set of events to unmute.
-    @available(macOS 13.0, *)
-    public func unmuteTargetPath(_ targetPath: String, type muteType: ESMutePathType, events: ESEventSet = .all) -> Bool {
-        return client.esUnmutePathEvents(targetPath, muteType.targetPath, Array(events.events)) == ES_RETURN_SUCCESS
     }
     
     /// Unmute all target paths. Works only for macOS 13.0+.
     @available(macOS 13.0, *)
-    public func unmuteAllTargetPaths() {
-        if client.esUnmuteAllTargetPaths() != ES_RETURN_SUCCESS {
-            log.warning("Failed to unmute all paths")
-        }
+    public func unmuteAllTargetPaths() -> Bool {
+        client.esUnmuteAllTargetPaths() == ES_RETURN_SUCCESS 
     }
     
     /// Invert the mute state of a given mute dimension.
@@ -300,7 +291,7 @@ public class ESClient {
         let isMuted = checkIgnored(message)
         switch message.action_type {
         case ES_ACTION_TYPE_AUTH:
-            guard let authMessageHandler = authMessageHandler, !isMuted else {
+            guard let authMessageHandler, !isMuted else {
                 respond(message, resolution: .allowOnce, reason: .muted)
                 return
             }
@@ -342,8 +333,8 @@ public class ESClient {
         
         let status = client.esRespond(message.rawMessage, flags: resolution.result.rawValue, cache: resolution.cache)
         
-        let responseInfo = ResponseInfo(reason: reason, resolution: resolution, status: status)
-        if let postAuthMessageHandler = postAuthMessageHandler {
+        if let postAuthMessageHandler {
+            let responseInfo = ResponseInfo(reason: reason, resolution: resolution, status: status)
             queue.async { postAuthMessageHandler(message, responseInfo) }
         }
     }
@@ -365,15 +356,6 @@ public class ESClient {
         DispatchQueue.global().asyncAfter(deadline: .now() + interval, execute: item)
         
         return item
-    }
-    
-    private func evaluateInterest(for process: ESProcess) -> ESInterest {
-        var interests = pathInterestRules.filter { $0.key.matches(process: process) }.map(\.value)
-        if let pathInterestHandler {
-            interests.append(queue.sync { pathInterestHandler(process) })
-        }
-        
-        return .combine(config.pathInterestRulesCombineType, interests) ?? .listen()
     }
 }
 
@@ -405,26 +387,6 @@ extension ESClient {
             self.reason = reason
             self.resolution = resolution
             self.status = status
-        }
-    }
-}
-
-extension Optional where Wrapped == DispatchQueue {
-    @inline(__always)
-    fileprivate func async(execute work: @escaping () -> Void) {
-        if let self {
-            self.async(execute: work)
-        } else {
-            work()
-        }
-    }
-    
-    @inline(__always)
-    fileprivate func sync<R>(execute work: () -> R) -> R {
-        if let self {
-            return self.sync(execute: work)
-        } else {
-            return work()
         }
     }
 }

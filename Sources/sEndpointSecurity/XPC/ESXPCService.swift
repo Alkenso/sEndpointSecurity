@@ -25,42 +25,43 @@ import EndpointSecurity
 import Foundation
 import SwiftConvenience
 
-private let log = SCLogger.internalLog(.xpcCommunication)
+private let log = SCLogger.internalLog(.xpc)
 
 public class ESXPCService: NSObject {
-    public var verifyConnectionHandler: ((audit_token_t) -> Bool)?
-    public var receiveCustomMessageHandler: ((_ message: ESXPCCustomMessage, _ peer: UUID) -> Void)?
-
+    private let createClient: () throws -> ESClient
+    private let listener: NSXPCListener
+    private let sendCustomMessage = EventNotify<(data: Data, peer: UUID, reply: (Result<Data, Error>) -> Void)>()
+    
     /// When receiving incoming conneciton, ESXPCService creates one ESClient for each connection.
-    /// You can setup all message handlers of ESClient prior to returning it from 'createConnection'.
+    /// `pathInterestHandler`, `authMessageHandler`, `notifyMessageHandler` are overriden by XPC engine.
+    /// Rest handles can be setup prior to returning new client from `createClient`.
     public init(listener: NSXPCListener, createClient: @escaping () throws -> ESClient) {
-        self._listener = listener
-        self._createClient = createClient
-
+        self.listener = listener
+        self.createClient = createClient
+        
         super.init()
-
-        _listener.delegate = self
+        
+        listener.delegate = self
     }
-
+    
+    public var verifyConnectionHandler: ((audit_token_t) -> Bool)?
+    public var receiveCustomMessageHandler: ((Data, UUID, @escaping (Result<Data, Error>) -> Void) -> Void)?
+    
     public func activate() {
-        _listener.resume()
+        listener.resume()
     }
-
-    public func sendCustomMessage(_ message: ESXPCCustomMessage, to peer: UUID) {
-        _sendCustomMessage.notify((message, peer))
+    
+    public func sendCustomMessage(_ data: Data, to peer: UUID, reply: @escaping (Result<Data, Error>) -> Void) {
+        sendCustomMessage.notify((data, peer, reply))
     }
-
+    
     // MARK: Private
-
-    private let _sendCustomMessage = EventNotify<(message: ESXPCCustomMessage, peer: UUID)>()
-    private let _createClient: () throws -> ESClient
-    private let _listener: NSXPCListener
 }
 
 extension ESXPCService: NSXPCListenerDelegate {
     public func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
         guard verifyConnectionHandler?(newConnection.auditToken) ?? true else { return false }
-
+        
         newConnection.exportedInterface = .esClient
         newConnection.remoteObjectInterface = .esClientDelegate
         guard let delegate = newConnection.remoteObjectProxy as? ESClientXPCDelegateProtocol else {
@@ -68,10 +69,9 @@ extension ESXPCService: NSXPCListenerDelegate {
             log.fatal("Failed to accept new connection. Error: \(error)")
             return false
         }
-
-        let client = createClient(delegate)
+        
+        let client = createExportedObject(delegate)
         newConnection.exportedObject = client
-        newConnection.resume()
         newConnection.invalidationHandler = { [weak client, weak newConnection] in
             client?.unsubscribeAll(reply: { _ in })
             newConnection?.invalidationHandler = nil
@@ -80,68 +80,53 @@ extension ESXPCService: NSXPCListenerDelegate {
             newConnection?.interruptionHandler = nil
             newConnection?.invalidate()
         }
-
+        newConnection.resume()
+        
         return true
     }
-
-    private func createClient(_ delegate: ESClientXPCDelegateProtocol) -> ESXPCServiceClient {
-        let client = ESXPCServiceClient(delegate: delegate, createClient: _createClient)
-
-        client.receiveCustomMessageHandler = { [weak self, clientID = client.id] in
-            self?.receiveCustomMessageHandler?($0, clientID)
+    
+    private func createExportedObject(_ delegate: ESClientXPCDelegateProtocol) -> ESXPCExportedObject {
+        let exportedClient = ESXPCExportedObject(delegate: delegate, createClient: createClient)
+        
+        exportedClient.receiveCustomMessageHandler = { [weak self, clientID = exportedClient.id] in
+            self?.receiveCustomMessageHandler?($0, clientID, $1)
         }
-
-        client.parentSubscription = _sendCustomMessage.subscribe { [weak client] in
-            guard let client = client, client.id == $0.peer else { return }
-            client.sendCustomMessage($0.message)
+        
+        exportedClient.parentSubscription = sendCustomMessage.subscribe { [weak exportedClient] in
+            guard let exportedClient, exportedClient.id == $0.peer else { return }
+            exportedClient.receiveCustomMessage($0.data, reply: $0.reply)
         }
-
-        return client
+        
+        return exportedClient
     }
 }
 
-class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
+private class ESXPCExportedObject: NSObject, ESClientXPCProtocol {
     let id = UUID()
-    var receiveCustomMessageHandler: ((ESXPCCustomMessage) -> Void)?
-    var parentSubscription: Any?
-
+    
     init(delegate: ESClientXPCDelegateProtocol, createClient: @escaping () throws -> ESClient) {
-        self._delegate = delegate
-        self._createClient = createClient
-    }
-
-    func sendCustomMessage(_ message: ESXPCCustomMessage) {
-        _sendCustomMessage.notify(message)
+        self.delegate = delegate
+        self.createClient = createClient
     }
     
-    func create(converterConfig: ESConverterConfigXPC, completion: @escaping (es_new_client_result_t) -> Void) {
+    var receiveCustomMessageHandler: ((Data, @escaping (Result<Data, Error>) -> Void) -> Void)?
+    var parentSubscription: Any?
+    
+    func receiveCustomMessage(_ data: Data, reply: @escaping (Result<Data, Error>) -> Void) {
+        delegate.receiveCustomMessage(data) { reply(Result(success: $0, failure: $1)) }
+    }
+    
+    func create(converterConfig: Data, completion: @escaping (es_new_client_result_t) -> Void) {
         do {
-            _converterConfig = try xpcDecoder.decode(ESConverter.Config.self, from: converterConfig)
+            self.converterConfig = try xpcDecoder.decode(ESConverter.Config.self, from: converterConfig)
             
-            let client = try _createClient()
-            defer { _client = client }
-
-            let localAuthHandler = client.authMessageHandler
-            client.authMessageHandler = { [weak self] message, authCompletion in
-                Self.authenticate(message, handler: localAuthHandler) { localResolution in
-                    Self.authenticate(message, handler: self?.handleAuthMessage) { remoteResolution in
-                        let resolutions = [localResolution, remoteResolution].compactMap { $0 }
-                        authCompletion(.combine(resolutions))
-                    }
-                }
-            }
-
-            let localNotifyHandler = client.notifyMessageHandler
-            client.notifyMessageHandler = { [weak self] in
-                localNotifyHandler?($0)
-                self?.handleNotifyMessage($0)
-            }
-
-            _sendCustomMessage.subscribe { [weak self] in
-                self?._delegate.custom(id: $0.id, payload: $0.payload, isReply: $0.isReply) {}
-            }
-            .store(in: &_cancellables)
-
+            let client = try createClient()
+            client.pathInterestHandler = { [weak self] in self?.handlePathInterest($0) ?? .listen() }
+            client.authMessageHandler = { [weak self] in self?.handleAuthMessage($0, completion: $1) }
+            client.notifyMessageHandler = { [weak self] in self?.handleNotifyMessage($0) }
+            
+            self.client = client
+            
             completion(ES_NEW_CLIENT_RESULT_SUCCESS)
         } catch {
             if let error = error as? ESClientCreateError {
@@ -151,171 +136,117 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
             }
         }
     }
-
+    
     func subscribe(_ events: [NSNumber], reply: @escaping (Bool) -> Void) {
-        DispatchQueue.global().async {
-            let converted = events.map(\.uint32Value).map(es_event_type_t.init(rawValue:))
-            reply(self._client?.subscribe(converted) ?? false)
-        }
+        let converted = events.map(\.uint32Value).map(es_event_type_t.init(rawValue:))
+        reply(client?.subscribe(converted) ?? false)
     }
-
+    
     func unsubscribe(_ events: [NSNumber], reply: @escaping (Bool) -> Void) {
-        DispatchQueue.global().async {
-            let converted = events.map(\.uint32Value).map(es_event_type_t.init(rawValue:))
-            reply(self._client?.unsubscribe(converted) ?? false)
-        }
+        let converted = events.map(\.uint32Value).map(es_event_type_t.init(rawValue:))
+        reply(client?.unsubscribe(converted) ?? false)
     }
-
+    
     func unsubscribeAll(reply: @escaping (Bool) -> Void) {
-        DispatchQueue.global().async {
-            reply(self._client?.unsubscribeAll() ?? false)
-        }
+        reply(client?.unsubscribeAll() ?? false)
     }
-
+    
     func clearCache(reply: @escaping (es_clear_cache_result_t) -> Void) {
-        DispatchQueue.global().async {
-            reply(self._client?.clearCache() ?? ES_CLEAR_CACHE_RESULT_ERR_INTERNAL)
-        }
-    }
-
-    func muteProcess(_ mute: ESMuteProcessRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void) {
-        withDecodedMute(
-            from: mute, type: ESMuteProcessRule.self, events: events,
-            actionName: "mute process", reply: reply
-        ) { client, mute, events in
-            client.muteProcess(mute, events: events)
-            return true
-        }
-    }
-
-    func unmuteProcess(_ mute: ESMuteProcessRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void) {
-        withDecodedMute(
-            from: mute, type: ESMuteProcessRule.self, events: events,
-            actionName: "unmute process", reply: reply
-        ) { client, mute, events in
-            client.unmuteProcess(mute, events: events)
-            return true
-        }
+        reply(client?.clearCache() ?? ES_CLEAR_CACHE_RESULT_ERR_INTERNAL)
     }
     
-    func unmuteAllProcesses(reply: @escaping (Error?) -> Void) {
-        do {
-            let client = try _client.get(name: "ESClient")
-            client.unmuteAllProcesses()
-            reply(nil)
-        } catch {
-            log.error("Failed to unmuteAllProcesses. Error: \(error)")
-            reply(error.xpcCompatible())
-        }
+    func clearPathInterestCache(reply: @escaping (Bool) -> Void) {
+        reply(client?.clearPathInterestCache() != nil)
     }
     
-    func mutePath(_ mute: ESMutePathRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void) {
-        withDecodedMute(
-            from: mute, type: ESMutePathRule.self, events: events,
-            actionName: "mute path", reply: reply
-        ) { client, mute, events in
-            client.mutePath(mute, events: events)
-            return true
-        }
-    }
-    
-    func unmutePath(_ mute: ESMutePathRuleXPC, events: ESEventSetXPC, reply: @escaping (Error?) -> Void) {
-        withDecodedMute(
-            from: mute, type: ESMutePathRule.self, events: events,
-            actionName: "unmute path", reply: reply
-        ) { client, mute, events in
-            if #available(macOS 12.0, *) {
-                client.unmutePath(mute, events: events)
-                return true
-            } else {
-                return false
-            }
-        }
-    }
-    
-    func unmuteAllPaths(reply: @escaping (Error?) -> Void) {
-        do {
-            let client = try _client.get(name: "ESClient")
-            client.unmuteAllPaths()
-            reply(nil)
-        } catch {
-            log.error("Failed to unmuteAllPaths. Error: \(error)")
-            reply(error.xpcCompatible())
-        }
-    }
-    
-    func muteTargetPath(_ targetPath: String, type muteType: Data, events: ESEventSetXPC, completion: @escaping (Bool) -> Void) {
-        withDecodedMute(
-            from: muteType, type: ESMutePathType.self, events: events,
-            actionName: "muteTargetPath", reply: { completion($0 == nil) }
-        ) { client, mute, events in
-            client.muteTargetPath(targetPath, type: mute)
-        }
-    }
-    
-    func unmuteTargetPath(_ targetPath: String, type muteType: Data, events: ESEventSetXPC, completion: @escaping (Bool) -> Void) {
-        withDecodedMute(
-            from: muteType, type: ESMutePathType.self, events: events,
-            actionName: "unmuteTargetPath", reply: { completion($0 == nil) }
-        ) { client, mute, events in
-            if #available(macOS 13.0, *) {
-                return client.unmuteTargetPath(targetPath, type: mute)
-            } else {
-                return false
-            }
-        }
-    }
-    
-    func unmuteAllTargetPaths(reply: @escaping (Error?) -> Void) {
-        do {
-            let client = try _client.get(name: "ESClient")
-            if #available(macOS 13.0, *) {
-                client.unmuteAllTargetPaths()
-            }
-            reply(nil)
-        } catch {
-            log.error("Failed to unmuteAllPaths. Error: \(error)")
-            reply(error.xpcCompatible())
-        }
-    }
-    
-    func invertMuting(_ muteType: es_mute_inversion_type_t, completion: @escaping (Bool) -> Void) {
-        if #available(macOS 13.0, *) {
-            let result = _client?.invertMuting(muteType) ?? false
-            completion(result)
+    func muteProcess(_ mute: Data, events: [NSNumber], reply: @escaping (Bool) -> Void) {
+        if let decoded = ESMuteProcessRule(from: mute, decoder: .json(decoder: xpcDecoder), log: log) {
+            reply(client?.muteProcess(decoded, events: .fromNumbers(events)) != nil)
         } else {
-            completion(false)
+            reply(false)
         }
     }
     
-    func mutingInverted(_ muteType: es_mute_inversion_type_t, completion: @escaping (Int) -> Void) {
-        if #available(macOS 13.0, *) {
-            let result = _client?.mutingInverted(muteType)
-            completion(result.flatMap { $0 ? 1 : 0 } ?? -1)
+    func unmuteProcess(_ mute: Data, events: [NSNumber], reply: @escaping (Bool) -> Void) {
+        if let decoded = ESMuteProcessRule(from: mute, decoder: .json(decoder: xpcDecoder), log: log) {
+            reply(client?.unmuteProcess(decoded, events: .fromNumbers(events)) != nil)
         } else {
-            completion(-1)
+            reply(false)
         }
     }
-
-    func custom(id: UUID, payload: Data, isReply: Bool, reply: @escaping () -> Void) {
-        DispatchQueue.global().async {
-            self.receiveCustomMessageHandler?(
-                ESXPCCustomMessage(id: id, payload: payload, isReply: isReply)
-            )
-            reply()
+    
+    func unmuteAllProcesses(reply: @escaping (Bool) -> Void) {
+        reply(client?.unmuteAllProcesses() != nil)
+    }
+    
+    func mutePath(_ path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Bool) -> Void) {
+        reply(client?.mutePath(path, type: type, events: .fromNumbers(events)) ?? false)
+    }
+    
+    func unmutePath(_ path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Bool) -> Void) {
+        if #available(macOS 12.0, *) {
+            reply(client?.unmutePath(path, type: type, events: .fromNumbers(events)) ?? false)
+        } else {
+            reply(false)
         }
     }
-
+    
+    func unmuteAllPaths(reply: @escaping (Bool) -> Void) {
+        reply(client?.unmuteAllPaths() ?? false)
+    }
+    
+    func unmuteAllTargetPaths(reply: @escaping (Bool) -> Void) {
+        if #available(macOS 13.0, *) {
+            reply(client?.unmuteAllTargetPaths() ?? false)
+        } else {
+            reply(false)
+        }
+    }
+    
+    func invertMuting(_ muteType: es_mute_inversion_type_t, reply: @escaping (Bool) -> Void) {
+        if #available(macOS 13.0, *) {
+            reply(client?.invertMuting(muteType) ?? false)
+        } else {
+            reply(false)
+        }
+    }
+    
+    func mutingInverted(_ muteType: es_mute_inversion_type_t, reply: @escaping (Bool) -> Void) {
+        if #available(macOS 13.0, *) {
+            reply(client?.mutingInverted(muteType) ?? false)
+        } else {
+            reply(false)
+        }
+    }
+    
+    func sendCustomMessage(_ data: Data, reply: @escaping (Data?, Error?) -> Void) {
+        if let receiveCustomMessageHandler {
+            receiveCustomMessageHandler(data) { reply($0.success, $0.failure) }
+        } else {
+            reply(nil, CommonError.unexpected("receiveCustomMessageHandler not set"))
+        }
+    }
+    
     // MARK: Private
-
-    private let _sendCustomMessage = EventNotify<ESXPCCustomMessage>()
-    private let _queue = DispatchQueue(label: "ESXPCServiceClient.queue")
-    private let _createClient: () throws -> ESClient
-    private let _delegate: ESClientXPCDelegateProtocol
-    private var _cancellables: [AnyCancellable] = []
-    private var _client: ESClient?
-    private var _converterConfig: ESConverter.Config = .default
-
+    
+    private let createClient: () throws -> ESClient
+    private let delegate: ESClientXPCDelegateProtocol
+    private var client: ESClient?
+    private var converterConfig: ESConverter.Config = .default
+    
+    private func handlePathInterest(_ process: ESProcess) -> ESInterest {
+        do {
+            let encoded = try xpcEncoder.encode(process)
+            let executor = SynchronousExecutor("HandlePathInterest", timeout: 5.0)
+            let interest = try executor { self.delegate.handlePathInterest(encoded, reply: $0) }
+            let decoded = try xpcDecoder.decode(ESInterest.self, from: interest)
+            return decoded
+        } catch {
+            log.error("handlePathInterest failed. Error: \(error)")
+            return .listen()
+        }
+    }
+    
     private func handleAuthMessage(_ message: ESMessagePtr, completion: @escaping (ESAuthResolution) -> Void) {
         processMessage(
             message,
@@ -342,68 +273,34 @@ class ESXPCServiceClient: NSObject, ESClientXPCProtocol {
     private func processMessage(
         _ message: ESMessagePtr,
         errorHandler: @escaping (Error) -> Void,
-        actionHandler: @escaping (ESClientXPCDelegateProtocol, ESMessageXPC) -> Void
+        actionHandler: @escaping (ESClientXPCDelegateProtocol, Data) -> Void
     ) {
-        _queue.async { [self] in
-            guard let remoteObject = _delegate as? NSXPCProxyCreating else {
-                let error = CommonError.cast(_delegate, to: NSXPCProxyCreating.self)
-                errorHandler(error)
-                return
-            }
-            
-            let proxy = remoteObject.remoteObjectProxyWithErrorHandler(errorHandler)
-            
-            guard let delegateProxy = proxy as? ESClientXPCDelegateProtocol else {
-                let error = CommonError.cast(proxy, to: ESClientXPCDelegateProtocol.self)
-                errorHandler(error)
-                return
-            }
-            
-            do {
-                let converted = try message.converted(_converterConfig)
-                let encoded = try xpcEncoder.encode(converted)
-                actionHandler(delegateProxy, encoded)
-            } catch {
-                errorHandler(error)
-            }
+        guard let remoteObject = delegate as? NSXPCProxyCreating else {
+            let error = CommonError.cast(delegate, to: NSXPCProxyCreating.self)
+            errorHandler(error)
+            return
+        }
+        
+        let proxy = remoteObject.remoteObjectProxyWithErrorHandler(errorHandler)
+        
+        guard let delegateProxy = proxy as? ESClientXPCDelegateProtocol else {
+            let error = CommonError.cast(proxy, to: ESClientXPCDelegateProtocol.self)
+            errorHandler(error)
+            return
+        }
+        
+        do {
+            let converted = try message.converted(converterConfig)
+            let encoded = try xpcEncoder.encode(converted)
+            actionHandler(delegateProxy, encoded)
+        } catch {
+            errorHandler(error)
         }
     }
-    
-    private func withDecodedMute<Mute: Decodable>(
-        from data: Data, type: Mute.Type, events: ESEventSetXPC,
-        actionName: String, reply: @escaping (Error?) -> Void,
-        body: @escaping (ESClient, Mute, ESEventSet) -> Bool
-    ) {
-        DispatchQueue.global().async { [self] in
-            do {
-                let decodedMute = try xpcDecoder.decode(Mute.self, from: data)
-                let decodedEvents = try xpcDecoder.decode(ESEventSet.self, from: events)
-                let client = try _client.get(name: "ESClient")
-                if body(client, decodedMute, decodedEvents) {
-                    reply(nil)
-                } else {
-                    throw CommonError("Action failed")
-                }
-            } catch {
-                log.error("Failed to \(actionName). Error: \(error)")
-                reply(error.xpcCompatible())
-            }
-        }
-    }
-    
-    private func decodeMute(_ mute: ESMuteProcessRuleXPC) -> ESMuteProcessRule? {
-        ESMuteProcessRule(from: mute, decoder: .json(), log: log)
-    }
-    
-    private static func authenticate(
-        _ message: ESMessagePtr,
-        handler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void) -> Void)?,
-        completion: @escaping (ESAuthResolution?) -> Void
-    ) {
-        if let handler = handler {
-            handler(message, completion)
-        } else {
-            completion(nil)
-        }
+}
+
+extension ESEventSet {
+    fileprivate static func fromNumbers(_ numbers: [NSNumber]) -> ESEventSet {
+        ESEventSet(events: numbers.map { es_event_type_t($0.uint32Value) })
     }
 }

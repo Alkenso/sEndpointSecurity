@@ -90,9 +90,9 @@ internal class ESMutePath {
         
         if !mute {
             let unmute = (entry.ignored ?? []).subtracting(entry.muted)
-            nativeUnmute(path, type: .literal, events: unmute)
+            nativeUnmute(path, type: ES_MUTE_PATH_TYPE_LITERAL, events: unmute)
         } else if !pathMutesInverted, let ignored = entry.ignored, !ignored.isEmpty {
-            muteNative(path, type: .literal, events: ignored)
+            muteNative(path, type: ES_MUTE_PATH_TYPE_LITERAL, events: ignored)
         }
     }
     
@@ -108,7 +108,7 @@ internal class ESMutePath {
     
     // MARK: Mute
     
-    func mute(_ path: String, type: ESMutePathType, events: Set<es_event_type_t>) {
+    func mute(_ path: String, type: es_mute_path_type_t, events: Set<es_event_type_t>) {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         
@@ -123,7 +123,7 @@ internal class ESMutePath {
     }
     
     @available(macOS 12.0, *)
-    func unmute(_ path: String, type: ESMutePathType, events: Set<es_event_type_t>) {
+    func unmute(_ path: String, type: es_mute_path_type_t, events: Set<es_event_type_t>) {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         
@@ -131,7 +131,7 @@ internal class ESMutePath {
         pathMutes[key]?.subtract(events)
         
         var events = events
-        if type == .literal, !pathMutesInverted, let entry = cache[path], entry.muteIgnoredNatively {
+        if type == ES_MUTE_PATH_TYPE_LITERAL, !pathMutesInverted, let entry = cache[path], entry.muteIgnoredNatively {
             events.subtract(entry.ignored ?? [])
         }
         nativeUnmute(path, type: type, events: events)
@@ -142,13 +142,14 @@ internal class ESMutePath {
         }
     }
     
-    func unmuteAll() {
+    func unmuteAll() -> Bool {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
         
-        _ = client.esUnmuteAllPaths()
+        guard client.esUnmuteAllPaths() == ES_RETURN_SUCCESS else { return false }
         cache.removeAll()
         pathMutes.removeAll()
+        return true
     }
     
     private func mutedEventsByRule(path: String) -> Set<es_event_type_t> {
@@ -159,23 +160,23 @@ internal class ESMutePath {
     
     // MARK: Mute - Native
     
-    private func muteNative(_ path: String, type: ESMutePathType, events: Set<es_event_type_t>) {
+    private func muteNative(_ path: String, type: es_mute_path_type_t, events: Set<es_event_type_t>) {
         if useAPIv12, #available(macOS 12.0, *) {
-            if client.esMutePathEvents(path, type.path, Array(events)) != ES_RETURN_SUCCESS {
+            if client.esMutePathEvents(path, type, Array(events)) != ES_RETURN_SUCCESS {
                 log.warning("Failed to mute path events: type = \(type), path = \(path)")
             }
         } else if events == ESEventSet.all.events {
-            if client.esMutePath(path, type.path) != ES_RETURN_SUCCESS {
+            if client.esMutePath(path, type) != ES_RETURN_SUCCESS {
                 log.warning("Failed to mute path: type = \(type), path = \(path)")
             }
         }
     }
     
     @available(macOS 12.0, *)
-    private func nativeUnmute(_ path: String, type: ESMutePathType, events: Set<es_event_type_t>) {
+    private func nativeUnmute(_ path: String, type: es_mute_path_type_t, events: Set<es_event_type_t>) {
         guard useAPIv12 else { return }
         
-        if client.esUnmutePathEvents(path, type.path, Array(events)) != ES_RETURN_SUCCESS {
+        if client.esUnmutePathEvents(path, type, Array(events)) != ES_RETURN_SUCCESS {
             log.warning("Failed to unmute path events: type = \(type), path = \(path)")
         }
     }
@@ -212,34 +213,14 @@ extension ESMutePath {
     
     private struct MutePathKey: Hashable {
         var pattern: String
-        var type: ESMutePathType
+        var type: es_mute_path_type_t
         
         func match(path: String) -> Bool {
-            type.match(string: path, pattern: pattern)
-        }
-    }
-}
-
-extension ESMutePathType {
-    internal func match(string: String, pattern: String) -> Bool {
-        switch self {
-        case .literal: return string == pattern
-        case .prefix: return string.starts(with: pattern)
-        }
-    }
-}
-
-extension ESPathInterestRule {
-    internal func matches(process: ESProcess) -> Bool {
-        switch self {
-        case .path(let path, let type):
-            return type.match(string: process.executable.path, pattern: path)
-        case .name(let name, let type):
-            return type.match(string: process.name, pattern: name)
-        case .teamID(let value):
-            return process.teamID == value
-        case .signingID(let value):
-            return process.signingID == value
+            switch type {
+            case ES_MUTE_PATH_TYPE_LITERAL: return path == pattern
+            case ES_MUTE_PATH_TYPE_PREFIX: return path.starts(with: pattern)
+            default: return false
+            }
         }
     }
 }
