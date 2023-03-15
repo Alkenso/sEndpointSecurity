@@ -24,12 +24,6 @@ import sEndpointSecurity
 
 import Foundation
 
-extension stat {
-    static func random() throws -> stat {
-        try FileManager.default.statItem(at: Bundle.main.bundleURL)
-    }
-}
-
 extension audit_token_t {
     static func random() -> audit_token_t {
         var token = audit_token_t()
@@ -37,22 +31,6 @@ extension audit_token_t {
             _ = SecRandomCopyBytes(kSecRandomDefault, MemoryLayout<audit_token_t>.size, $0)
         }
         return token
-    }
-}
-
-extension attrlist {
-    static var random: attrlist {
-        .init(bitmapcount: 1, reserved: 2, commonattr: 3, volattr: 4, dirattr: 5, fileattr: 6, forkattr: 7)
-    }
-}
-
-extension statfs {
-    static var random: statfs {
-        var value = statfs()
-        withUnsafeMutablePointer(to: &value) { pointer in
-            _ = SecRandomCopyBytes(kSecRandomDefault, MemoryLayout<statfs>.size, pointer)
-        }
-        return value
     }
 }
 
@@ -65,7 +43,7 @@ extension ESProcess {
         test(path: nil, token: token)
     }
     
-    private static func test(path: String?, token: audit_token_t?) -> ESProcess {
+    static func test(path: String? = nil, token: audit_token_t? = nil, teamID: String? = nil) -> ESProcess {
         ESProcess(
             auditToken: token ?? .random(),
             ppid: 10,
@@ -77,7 +55,7 @@ extension ESProcess {
             isESClient: true,
             cdHash: Data([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]),
             signingID: "signing_id",
-            teamID: "team_id",
+            teamID: teamID ?? "team_id",
             executable: ESFile(
                 path: path ?? "/root/path/to/executable/test_process",
                 truncated: false,

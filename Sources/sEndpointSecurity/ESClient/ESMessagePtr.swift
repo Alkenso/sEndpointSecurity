@@ -29,7 +29,6 @@ public class ESMessagePtr {
     private enum Ownership {
         case retained
         case unowned
-        case allocated
     }
     
     public let rawMessage: UnsafePointer<es_message_t>
