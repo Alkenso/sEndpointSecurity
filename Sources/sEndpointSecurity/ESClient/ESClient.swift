@@ -287,6 +287,7 @@ public class ESClient {
     private let processMutes: ESMuteProcess
     private let timebaseInfo: mach_timebase_info?
     
+    @inline(__always)
     private func handleMessage(_ message: ESMessagePtr) {
         let isMuted = checkIgnored(message)
         switch message.action_type {
@@ -296,8 +297,11 @@ public class ESClient {
                 return
             }
             
-            let item = scheduleCancel(for: message) {
-                self.respond(message, resolution: .allowOnce, reason: .timeout)
+            var item: DispatchWorkItem?
+            if let timebaseInfo, let messageTimeout = config.messageTimeout {
+                item = scheduleCancel(for: message, timebaseInfo: timebaseInfo, timeout: messageTimeout) {
+                    self.respond(message, resolution: .allowOnce, reason: .timeout)
+                }
             }
             
             queue.async {
@@ -313,6 +317,7 @@ public class ESClient {
         }
     }
     
+    @inline(__always)
     private func checkIgnored(_ message: ESMessagePtr) -> Bool {
         let event = message.event_type
         let converter = ESConverter(version: message.version)
@@ -327,6 +332,7 @@ public class ESClient {
         return false
     }
     
+    @inline(__always)
     private func respond(_ message: ESMessagePtr, resolution: ESAuthResolution, reason: ResponseReason, timeoutItem: DispatchWorkItem? = nil) {
         guard timeoutItem?.isCancelled != true else { return }
         timeoutItem?.cancel()
@@ -339,13 +345,17 @@ public class ESClient {
         }
     }
     
-    private func scheduleCancel(for message: ESMessagePtr, cancellation: @escaping () -> Void) -> DispatchWorkItem? {
-        guard let timebaseInfo, let messageTimeout = config.messageTimeout else { return nil }
+    private func scheduleCancel(
+        for message: ESMessagePtr,
+        timebaseInfo: mach_timebase_info,
+        timeout: Config.MessageTimeout,
+        cancellation: @escaping () -> Void
+    ) -> DispatchWorkItem? {
         let machInterval = message.deadline - message.mach_time
         let fullInterval = TimeInterval(machTime: machInterval, timebase: timebaseInfo)
         
         let interval: TimeInterval
-        switch messageTimeout {
+        switch timeout {
         case .seconds(let seconds):
             interval = min(seconds, fullInterval)
         case .ratio(let ratio):
@@ -362,7 +372,6 @@ public class ESClient {
 extension ESClient {
     public struct Config: Equatable, Codable {
         public var messageTimeout: MessageTimeout?
-        public var pathInterestRulesCombineType: ESInterest.CombineType = .restrictive
         
         public enum MessageTimeout: Equatable, Codable {
             case ratio(Double) // 0...1.0
