@@ -26,7 +26,7 @@ import SwiftConvenience
 
 private let log = SCLogger.internalLog(.xpc)
 
-internal class ESXPCConnection {
+internal final class ESXPCConnection {
     typealias ConnectResult = Result<es_new_client_result_t, Error>
     var connectionStateHandler: ((ConnectResult) -> Void)?
     

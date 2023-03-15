@@ -27,7 +27,7 @@ import SwiftConvenience
 
 private let log = SCLogger.internalLog(.client)
 
-public class ESClient {
+public final class ESClient {
     /// Initialise a new ESClient and connect to the ES subsystem. No-throw version
     /// Subscribe to some set of events
     /// - Parameters:

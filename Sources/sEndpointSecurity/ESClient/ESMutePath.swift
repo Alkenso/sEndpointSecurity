@@ -26,7 +26,7 @@ import SwiftConvenience
 
 private let log = SCLogger.internalLog(.client)
 
-internal class ESMutePath {
+internal final class ESMutePath {
     private let client: ESNativeClient
     private let useAPIv12: Bool
     

@@ -26,7 +26,7 @@ import SwiftConvenience
 
 private let log = SCLogger.internalLog(.client)
 
-internal class ESMuteProcess {
+internal final class ESMuteProcess {
     private let client: ESNativeClient
     private let cleanupDelay: TimeInterval
     private let environment: Environment

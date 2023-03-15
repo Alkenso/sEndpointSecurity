@@ -25,7 +25,7 @@ import Foundation
 import SwiftConvenience
 
 @dynamicMemberLookup
-public class ESMessagePtr {
+public final class ESMessagePtr {
     private enum Ownership {
         case retained
         case unowned

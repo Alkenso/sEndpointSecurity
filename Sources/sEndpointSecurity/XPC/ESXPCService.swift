@@ -27,7 +27,7 @@ import SwiftConvenience
 
 private let log = SCLogger.internalLog(.xpc)
 
-public class ESXPCService: NSObject {
+public final class ESXPCService: NSObject {
     private let createClient: () throws -> ESClient
     private let listener: NSXPCListener
     private let sendCustomMessage = EventNotify<(data: Data, peer: UUID, reply: (Result<Data, Error>) -> Void)>()
@@ -101,7 +101,7 @@ extension ESXPCService: NSXPCListenerDelegate {
     }
 }
 
-private class ESXPCExportedObject: NSObject, ESClientXPCProtocol {
+private final class ESXPCExportedObject: NSObject, ESClientXPCProtocol {
     let id = UUID()
     
     init(delegate: ESClientXPCDelegateProtocol, createClient: @escaping () throws -> ESClient) {

@@ -26,7 +26,7 @@ import SwiftConvenience
 
 private let log = SCLogger.internalLog(.xpc)
 
-public class ESXPCClient {
+public final class ESXPCClient {
     @Atomic private var connection: ESXPCConnection
     private let delegate: ESClientXPCDelegate
     private var subscribedEvents = Synchronized<Set<es_event_type_t>>(.serial)
@@ -268,7 +268,7 @@ public class ESXPCClient {
     }
 }
 
-private class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
+private final class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
     var queue: DispatchQueue?
     var pathInterestHandler: ((ESProcess) -> ESInterest)?
     var authMessageHandler: ((ESMessage, @escaping (ESAuthResolution) -> Void) -> Void)?
