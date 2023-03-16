@@ -72,7 +72,7 @@ class ESClientTests: XCTestCase {
     
     func test_mutes_ignores() {
         // Case 1.
-        XCTAssertTrue(client.mutePath("test1", type: ES_MUTE_PATH_TYPE_LITERAL))
+        XCTAssertTrue(client.mute(path: "test1", type: ES_MUTE_PATH_TYPE_LITERAL))
         
         let expCase1Test1NotCalled = expectation(description: "case 1: test1 process should be muted")
         expCase1Test1NotCalled.isInverted = true
@@ -94,7 +94,7 @@ class ESClientTests: XCTestCase {
         waitForExpectations()
         
         // Case 2.
-        XCTAssertTrue(client.mutePath("test2", type: ES_MUTE_PATH_TYPE_LITERAL, events: [ES_EVENT_TYPE_NOTIFY_OPEN]))
+        XCTAssertTrue(client.mute(path: "test2", type: ES_MUTE_PATH_TYPE_LITERAL, events: [ES_EVENT_TYPE_NOTIFY_OPEN]))
         
         let expCase2OpenNotCalled = expectation(description: "case 2: OPEN event is mutes")
         expCase2OpenNotCalled.isInverted = true
@@ -169,7 +169,7 @@ class ESClientTests: XCTestCase {
         XCTAssertTrue(client.invertMuting(ES_MUTE_INVERSION_TYPE_PATH))
         
         /// Only events from `test...` shoud come.
-        XCTAssertTrue(client.mutePath("test", type: ES_MUTE_PATH_TYPE_PREFIX))
+        XCTAssertTrue(client.mute(path: "test", type: ES_MUTE_PATH_TYPE_PREFIX))
         
         let processMuteHandlerExp = expectation(description: "Process mute handler called once per process")
         processMuteHandlerExp.expectedFulfillmentCount = 2

@@ -165,10 +165,9 @@ public final class ESClient {
     ///
     /// The final decision if the particular event is delivered or not relies on multiple sources.
     /// Sources considered:
-    /// - `mutePath` rules
-    /// - `muteProcess` rules
+    /// - `mute(path:)` rules
+    /// - `mute(process:)` rules
     /// - `pathInterestHandler` resolution
-    /// - `pathInterestRules` rules
     ///
     /// - Note: Interest does NOT depend on `inversion` of `ESClient`.
     /// - Note: Returned resolutions are cached to avoid often handler calls.
@@ -191,7 +190,7 @@ public final class ESClient {
     /// - Parameters:
     ///     - mute: process to mute.
     ///     - events: set of events to mute.
-    public func muteProcess(_ rule: ESMuteProcessRule, events: ESEventSet = .all) {
+    public func mute(process rule: ESMuteProcessRule, events: ESEventSet = .all) {
         guard let token = rule.token else { return }
         processMutes.mute(token, events: events.events)
     }
@@ -200,7 +199,7 @@ public final class ESClient {
     /// - Parameters:
     ///     - mute: process to unmute.
     ///     - events: set of events to mute.
-    public func unmuteProcess(_ rule: ESMuteProcessRule, events: ESEventSet = .all) {
+    public func unmute(process rule: ESMuteProcessRule, events: ESEventSet = .all) {
         guard let token = rule.token else { return }
         processMutes.unmute(token, events: events.events)
     }
@@ -215,7 +214,7 @@ public final class ESClient {
     ///     - mute: process path to mute.
     ///     - type: path type.
     ///     - events: set of events to mute.
-    public func mutePath(_ path: String, type: es_mute_path_type_t, events: ESEventSet = .all) -> Bool {
+    public func mute(path: String, type: es_mute_path_type_t, events: ESEventSet = .all) -> Bool {
         switch type {
         case ES_MUTE_PATH_TYPE_PREFIX, ES_MUTE_PATH_TYPE_LITERAL:
             pathMutes.mute(path, type: type, events: events.events)
@@ -235,7 +234,7 @@ public final class ESClient {
     ///     - type: path type.
     ///     - events: set of events to unmute.
     @available(macOS 12.0, *)
-    public func unmutePath(_ path: String, type: es_mute_path_type_t, events: ESEventSet = .all) -> Bool {
+    public func unmute(path: String, type: es_mute_path_type_t, events: ESEventSet = .all) -> Bool {
         switch type {
         case ES_MUTE_PATH_TYPE_PREFIX, ES_MUTE_PATH_TYPE_LITERAL:
             pathMutes.unmute(path, type: type, events: events.events)

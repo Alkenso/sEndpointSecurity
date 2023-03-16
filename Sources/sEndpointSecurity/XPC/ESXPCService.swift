@@ -159,17 +159,17 @@ private final class ESXPCExportedObject: NSObject, ESClientXPCProtocol {
         reply(client?.clearPathInterestCache() != nil)
     }
     
-    func muteProcess(_ mute: Data, events: [NSNumber], reply: @escaping (Bool) -> Void) {
+    func mute(process mute: Data, events: [NSNumber], reply: @escaping (Bool) -> Void) {
         if let decoded = ESMuteProcessRule(from: mute, decoder: .json(decoder: xpcDecoder), log: log) {
-            reply(client?.muteProcess(decoded, events: .fromNumbers(events)) != nil)
+            reply(client?.mute(process: decoded, events: .fromNumbers(events)) != nil)
         } else {
             reply(false)
         }
     }
     
-    func unmuteProcess(_ mute: Data, events: [NSNumber], reply: @escaping (Bool) -> Void) {
+    func unmute(process mute: Data, events: [NSNumber], reply: @escaping (Bool) -> Void) {
         if let decoded = ESMuteProcessRule(from: mute, decoder: .json(decoder: xpcDecoder), log: log) {
-            reply(client?.unmuteProcess(decoded, events: .fromNumbers(events)) != nil)
+            reply(client?.unmute(process: decoded, events: .fromNumbers(events)) != nil)
         } else {
             reply(false)
         }
@@ -179,13 +179,13 @@ private final class ESXPCExportedObject: NSObject, ESClientXPCProtocol {
         reply(client?.unmuteAllProcesses() != nil)
     }
     
-    func mutePath(_ path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Bool) -> Void) {
-        reply(client?.mutePath(path, type: type, events: .fromNumbers(events)) ?? false)
+    func mute(path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Bool) -> Void) {
+        reply(client?.mute(path: path, type: type, events: .fromNumbers(events)) ?? false)
     }
     
-    func unmutePath(_ path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Bool) -> Void) {
+    func unmute(path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Bool) -> Void) {
         if #available(macOS 12.0, *) {
-            reply(client?.unmutePath(path, type: type, events: .fromNumbers(events)) ?? false)
+            reply(client?.unmute(path: path, type: type, events: .fromNumbers(events)) ?? false)
         } else {
             reply(false)
         }

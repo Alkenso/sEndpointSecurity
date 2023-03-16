@@ -29,11 +29,11 @@ internal protocol ESClientXPCProtocol {
     
     func clearPathInterestCache(reply: @escaping (Bool) -> Void)
     
-    func muteProcess(_ mute: Data, events: [NSNumber], reply: @escaping (Bool) -> Void)
-    func unmuteProcess(_ mute: Data, events: [NSNumber], reply: @escaping (Bool) -> Void)
+    func mute(process mute: Data, events: [NSNumber], reply: @escaping (Bool) -> Void)
+    func unmute(process mute: Data, events: [NSNumber], reply: @escaping (Bool) -> Void)
     func unmuteAllProcesses(reply: @escaping (Bool) -> Void)
-    func mutePath(_ mute: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Bool) -> Void)
-    func unmutePath(_ mute: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Bool) -> Void)
+    func mute(path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Bool) -> Void)
+    func unmute(path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Bool) -> Void)
     func unmuteAllPaths(reply: @escaping (Bool) -> Void)
     func unmuteAllTargetPaths(reply: @escaping (Bool) -> Void)
     

@@ -148,10 +148,9 @@ public final class ESXPCClient {
     ///
     /// The final decision if the particular event is delivered or not relies on multiple sources.
     /// Sources considered:
-    /// - `mutePath` rules
-    /// - `muteProcess` rules
+    /// - `mute(path:)` rules
+    /// - `mute(process:)` rules
     /// - `pathInterestHandler` resolution
-    /// - `pathInterestRules` rules
     ///
     /// - Note: Interest does NOT depend on `inversion` of `ESClient`.
     /// - Note: Returned resolutions are cached to avoid often handler calls.
@@ -174,9 +173,9 @@ public final class ESXPCClient {
     /// - Parameters:
     ///     - mute: process to mute.
     ///     - events: set of events to mute.
-    public func muteProcess(_ rule: ESMuteProcessRule, events: ESEventSet = .all, completion: @escaping (Bool) -> Void) {
+    public func mute(process rule: ESMuteProcessRule, events: ESEventSet = .all, completion: @escaping (Bool) -> Void) {
         if let (proxy, encoded) = withEncoded(rule, actionName: "muteProcess", reply: completion) {
-            proxy.muteProcess(encoded, events: events.asNumbers, reply: completion)
+            proxy.mute(process: encoded, events: events.asNumbers, reply: completion)
         }
     }
     
@@ -184,9 +183,9 @@ public final class ESXPCClient {
     /// - Parameters:
     ///     - mute: process to unmute.
     ///     - events: set of events to mute.
-    public func unmuteProcess(_ rule: ESMuteProcessRule, events: ESEventSet = .all, completion: @escaping (Bool) -> Void) {
+    public func unmute(process rule: ESMuteProcessRule, events: ESEventSet = .all, completion: @escaping (Bool) -> Void) {
         if let (proxy, encoded) = withEncoded(rule, actionName: "unmuteProcess", reply: completion) {
-            proxy.muteProcess(encoded, events: events.asNumbers, reply: completion)
+            proxy.mute(process: encoded, events: events.asNumbers, reply: completion)
         }
     }
     
@@ -200,8 +199,8 @@ public final class ESXPCClient {
     ///     - mute: process path to mute.
     ///     - type: path type.
     ///     - events: set of events to mute.
-    public func mutePath(_ path: String, type: es_mute_path_type_t, events: ESEventSet = .all, completion: @escaping (Bool) -> Void) {
-        remoteObjectProxy(completion)?.mutePath(path, type: type, events: events.asNumbers, reply: completion)
+    public func mute(path: String, type: es_mute_path_type_t, events: ESEventSet = .all, completion: @escaping (Bool) -> Void) {
+        remoteObjectProxy(completion)?.mute(path: path, type: type, events: events.asNumbers, reply: completion)
     }
     
     /// Unmute events for the given at path and type.
@@ -210,8 +209,8 @@ public final class ESXPCClient {
     ///     - type: path type.
     ///     - events: set of events to unmute.
     @available(macOS 12.0, *)
-    public func unmutePath(_ path: String, type: es_mute_path_type_t, events: ESEventSet = .all, completion: @escaping (Bool) -> Void) {
-        remoteObjectProxy(completion)?.unmutePath(path, type: type, events: events.asNumbers, reply: completion)
+    public func unmute(path: String, type: es_mute_path_type_t, events: ESEventSet = .all, completion: @escaping (Bool) -> Void) {
+        remoteObjectProxy(completion)?.unmute(path: path, type: type, events: events.asNumbers, reply: completion)
     }
     
     /// Unmute all events for all process paths.
