@@ -73,7 +73,7 @@ internal final class ESMutePath {
         
         if let interest {
             entry.ignored = ESEventSet(events: interest.events).inverted().events
-            entry.muteIgnoredNatively = interest.nativeMuteIgnored
+            entry.muteIgnoredNatively = interest.suggestNativeMuting
             updateMutedIgnores(entry, path: path, mute: true)
         }
         

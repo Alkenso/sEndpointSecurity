@@ -87,7 +87,7 @@ extension ESEventSet {
 
 public struct ESInterest: Equatable, Codable {
     public var events: Set<es_event_type_t>
-    public internal(set) var nativeMuteIgnored = false
+    public internal(set) var suggestNativeMuting = false
 }
 
 extension ESInterest {
@@ -95,17 +95,13 @@ extension ESInterest {
         ESInterest(events: events.events)
     }
     
-    public static func ignore(_ events: ESEventSet = .all) -> ESInterest {
-        ESInterest(events: events.inverted().events)
-    }
-    
     /// Ignore set of events.
-    /// Additionally performs native muting of the path literal / process.
+    /// Additionally performs native muting of the path literal / process is suggested and possible.
     /// - Warning: muting natively too many paths or processes (200+) may cause performance degradation
     /// because of implementation specifics of `es_client` on some versions of macOS.
-    @available(macOS 12.0, *)
-    public static func ignore(_ events: ESEventSet, suggestNativeMuting: Bool) -> ESInterest {
-        ESInterest(events: events.inverted().events, nativeMuteIgnored: suggestNativeMuting)
+    /// - Note: suggestNativeMuting works only on macOS 12.0+.
+    public static func ignore(_ events: ESEventSet = .all, suggestNativeMuting: Bool = false) -> ESInterest {
+        ESInterest(events: events.inverted().events, suggestNativeMuting: suggestNativeMuting)
     }
 }
 
@@ -120,9 +116,9 @@ extension ESInterest {
             case .permissive: $0.formUnion($1.events)
             }
         }
-        let nativeMute = resolutions.map(\.nativeMuteIgnored).reduce(true) { $0 && $1 }
+        let nativeMute = resolutions.map(\.suggestNativeMuting).reduce(true) { $0 && $1 }
         
-        return ESInterest(events: events, nativeMuteIgnored: nativeMute)
+        return ESInterest(events: events, suggestNativeMuting: nativeMute)
     }
     
     public enum CombineType: Equatable, Codable {
