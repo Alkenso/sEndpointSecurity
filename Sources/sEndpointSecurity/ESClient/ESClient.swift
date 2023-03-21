@@ -45,7 +45,7 @@ public final class ESClient {
     /// Initialise a new ESClient and connect to the ES subsystem
     /// - throws: ESClientCreateError in case of error
     public convenience init() throws {
-        var client: OpaquePointer?
+        var client: OpaquePointer!
         weak var weakSelf: ESClient?
         let status = es_new_client(&client) { innerClient, rawMessage in
             if let self = weakSelf {
@@ -56,16 +56,19 @@ public final class ESClient {
             }
         }
         
-        try self.init(client: client, status: status)
+        try self.init(client: client, native: client, status: status)
         weakSelf = self
     }
     
-    private init(client: ESNativeClient?, status: es_new_client_result_t) throws {
+    private init(client: ESNativeClient?, native: OpaquePointer, status: es_new_client_result_t) throws {
         guard let client, status == ES_NEW_CLIENT_RESULT_SUCCESS else {
             throw ESClientCreateError(status: status)
         }
         
+        _ = validESEvents(client)
+        
         self.client = client
+        self.unsafeNativeClient = native
         self.pathMutes = ESMutePath(client: client)
         self.processMutes = ESMuteProcess(client: client)
         
@@ -96,7 +99,7 @@ public final class ESClient {
     /// Reference to `es_client_t` used under the hood.
     /// DO NOT use it for modifyng any mutes/inversions/etc, the behaviour is undefined.
     /// You may want to use it for informational purposes (list of mutes, etc).
-    public var unsafeNativeClient: ESNativeClient { client }
+    public var unsafeNativeClient: OpaquePointer
     
     // MARK: Messages
     
@@ -413,7 +416,7 @@ extension ESClient {
             }
         }
         
-        let client = try ESClient(client: native, status: status)
+        let client = try ESClient(client: native, native: OpaquePointer(bitPattern: 0xDEADBEEF)!, status: status)
         weakSelf = client
         
         return client

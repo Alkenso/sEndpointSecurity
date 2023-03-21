@@ -22,6 +22,7 @@
 
 import EndpointSecurity
 import Foundation
+import SwiftConvenience
 
 extension es_event_exec_t {
     public var args: [String] {
@@ -49,3 +50,48 @@ extension es_event_exec_t {
         }
     }
 }
+
+internal func validESEvents(_ client: ESNativeClient) -> Set<es_event_type_t> {
+    guard #available(macOS 12.0, *) else { return fallbackESEvents }
+    
+    return validESEventsCacheLock.withLock {
+        if let validESEventsCache { return validESEventsCache }
+        
+        let dummyPath = "/dummy_\(UUID())"
+        guard client.esMutePath(dummyPath, ES_MUTE_PATH_TYPE_LITERAL) == ES_RETURN_SUCCESS else {
+            return fallbackESEvents
+        }
+        defer { _ = client.esUnmutePath(dummyPath, ES_MUTE_PATH_TYPE_LITERAL) }
+        
+        guard let allMutes = client.esMutedPaths().first(where: { $0.path == dummyPath })?.events,
+              !allMutes.isEmpty
+        else {
+            return fallbackESEvents
+        }
+        
+        validESEventsCache = Set(allMutes)
+        
+        return validESEventsCache!
+    }
+}
+
+private var validESEventsCache: Set<es_event_type_t>?
+private var validESEventsCacheLock = os_unfair_lock()
+
+private let fallbackESEvents: Set<es_event_type_t> = {
+    let lastEvent: UInt32
+    if #available(macOS 12.0, *) {
+        lastEvent = ES_EVENT_TYPE_LAST.rawValue
+    } else if #available(macOS 11.3, *) {
+        lastEvent = ES_EVENT_TYPE_NOTIFY_GET_TASK_INSPECT.rawValue + 1
+    } else if #available(macOS 11.0, *) {
+        lastEvent = ES_EVENT_TYPE_NOTIFY_REMOUNT.rawValue + 1
+    } else if #available(macOS 10.15.4, *) {
+        lastEvent = ES_EVENT_TYPE_AUTH_GET_TASK.rawValue + 1
+    } else if #available(macOS 10.15.1, *) {
+        lastEvent = ES_EVENT_TYPE_NOTIFY_SETACL.rawValue + 1
+    } else {
+        lastEvent = ES_EVENT_TYPE_AUTH_SETOWNER.rawValue + 1
+    }
+    return Set((0..<lastEvent).map(es_event_type_t.init(rawValue:)))
+}()
