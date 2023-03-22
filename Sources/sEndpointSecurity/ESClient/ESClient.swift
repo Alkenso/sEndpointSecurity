@@ -27,7 +27,7 @@ import SwiftConvenience
 
 private let log = SCLogger.internalLog(.client)
 
-public final class ESClient {
+public final class ESClient: ESClientProtocol {
     /// Initialise a new ESClient and connect to the ES subsystem. No-throw version
     /// Subscribe to some set of events
     /// - Parameters:
@@ -155,7 +155,7 @@ public final class ESClient {
     // MARK: Interest
     
     /// Perform process filtering, additionally to muting of path and processes.
-    /// Filtering is based on `interest in particular process executable path`.
+    /// Filtering is based on `interest in process with particular executable path`. 
     /// Designed to be used for granular process filtering by ignoring uninterest events.
     ///
     /// General idea is to mute or ignore processes we are not interested in using their binary paths.
@@ -164,7 +164,7 @@ public final class ESClient {
     ///
     /// The process may be interested or ignored accoding to returned `ESInterest`.
     /// If the process is not interested, all related messages are skipped.
-    /// More information on `ESMuteResolution` see in related documentation.
+    /// More information on `ESInterest` see in related documentation.
     ///
     /// The final decision if the particular event is delivered or not relies on multiple sources.
     /// Sources considered:

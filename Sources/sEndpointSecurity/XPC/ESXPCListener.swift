@@ -27,12 +27,12 @@ import SwiftConvenience
 
 private let log = SCLogger.internalLog(.xpc)
 
-public final class ESXPCService: NSObject {
+public final class ESXPCListener: NSObject {
     private let createClient: () throws -> ESClient
     private let listener: NSXPCListener
     private let sendCustomMessage = EventNotify<(data: Data, peer: UUID, reply: (Result<Data, Error>) -> Void)>()
     
-    /// When receiving incoming conneciton, ESXPCService creates one ESClient for each connection.
+    /// When receiving incoming conneciton, ESXPCListener creates one ESClient for each connection.
     /// `pathInterestHandler`, `authMessageHandler`, `notifyMessageHandler` are overriden by XPC engine.
     /// Rest handles can be setup prior to returning new client from `createClient`.
     public init(listener: NSXPCListener, createClient: @escaping () throws -> ESClient) {
@@ -58,7 +58,7 @@ public final class ESXPCService: NSObject {
     // MARK: Private
 }
 
-extension ESXPCService: NSXPCListenerDelegate {
+extension ESXPCListener: NSXPCListenerDelegate {
     public func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
         guard verifyConnectionHandler?(newConnection.auditToken) ?? true else { return false }
         

@@ -144,7 +144,7 @@ public final class ESXPCClient {
     ///
     /// The process may be interested or ignored accoding to returned `ESInterest`.
     /// If the process is not interested, all related messages are skipped.
-    /// More information on `ESMuteResolution` see in related documentation.
+    /// More information on `ESInterest` see in related documentation.
     ///
     /// The final decision if the particular event is delivered or not relies on multiple sources.
     /// Sources considered:

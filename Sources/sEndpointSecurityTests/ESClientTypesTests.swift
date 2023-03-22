@@ -108,4 +108,16 @@ class ESClientTypesTests: XCTestCase {
             ESInterest(events: [ES_EVENT_TYPE_NOTIFY_OPEN])
         )
     }
+    
+    func test_ESMultipleResolution() {
+        let count = 3
+        let exp = expectation(description: "")
+        let group = ESMultipleResolution(count: count) {
+            XCTAssertEqual($0, .allowOnce)
+            exp.fulfill()
+        }
+        (0..<count).forEach { _ in group.resolve(.allowOnce) }
+        
+        waitForExpectations()
+    }
 }

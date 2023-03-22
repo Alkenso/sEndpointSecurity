@@ -26,6 +26,7 @@ import SwiftConvenience
 public enum sEndpointSecurityLogSubsystem: String, SCLogSubsystem {
     case client = "ESClient"
     case xpc = "ESXPC"
+    case service = "ESService"
 }
 
 extension sEndpointSecurityLogSubsystem: CustomStringConvertible {
