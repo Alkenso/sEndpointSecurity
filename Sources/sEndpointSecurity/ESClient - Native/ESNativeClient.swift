@@ -140,7 +140,7 @@ extension OpaquePointer: ESNativeClient {
     
     public func esMutedProcesses() -> [audit_token_t: [es_event_type_t]] {
         if #available(macOS 12.0, *) {
-            var processes: UnsafeMutablePointer<es_muted_processes_t>! = .init(bitPattern: 0xDEADBEEF)!
+            var processes: UnsafeMutablePointer<es_muted_processes_t>! = .init(bitPattern: 0xdeadbeef)!
             guard es_muted_processes_events(self, &processes) == ES_RETURN_SUCCESS else { return [:] }
             defer { es_release_muted_processes(processes) }
             return Array(UnsafeBufferPointer(start: processes.pointee.processes, count: processes.pointee.count))
@@ -149,7 +149,7 @@ extension OpaquePointer: ESNativeClient {
                 }
         } else {
             var count: Int = 0
-            var tokens = UnsafeMutablePointer<audit_token_t>(bitPattern: 0xDEADBEEF)!
+            var tokens = UnsafeMutablePointer<audit_token_t>(bitPattern: 0xdeadbeef)!
             guard es_muted_processes(self, &count, &tokens) == ES_RETURN_SUCCESS else { return [:] }
             defer { tokens.deallocate() }
             return Array(UnsafeBufferPointer(start: tokens, count: count))
@@ -202,7 +202,7 @@ extension OpaquePointer: ESNativeClient {
     
     @available(macOS 12.0, *)
     public func esMutedPaths() -> [(path: String, type: es_mute_path_type_t, events: [es_event_type_t])] {
-        var paths = UnsafeMutablePointer<es_muted_paths_t>(bitPattern: 0xDEADBEEF)!
+        var paths = UnsafeMutablePointer<es_muted_paths_t>(bitPattern: 0xdeadbeef)!
         guard es_muted_paths_events(self, &paths) == ES_RETURN_SUCCESS else { return [] }
         defer { es_release_muted_paths(paths) }
         

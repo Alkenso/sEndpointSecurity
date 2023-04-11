@@ -32,19 +32,19 @@ public final class ESClient: ESClientProtocol {
     /// Subscribe to some set of events
     /// - Parameters:
     ///     - status: Out parameter indicating status on initialization result
-    public convenience init?(status: inout es_new_client_result_t) {
+    public convenience init?(_ name: String? = nil, status: inout es_new_client_result_t) {
         do {
-            try self.init()
+            try self.init(name)
             status = ES_NEW_CLIENT_RESULT_SUCCESS
         } catch {
-            status = (error as? ESClientCreateError)?.status ?? ES_NEW_CLIENT_RESULT_ERR_INTERNAL
+            status = (error as? ESError<es_new_client_result_t>)?.result ?? ES_NEW_CLIENT_RESULT_ERR_INTERNAL
             return nil
         }
     }
     
     /// Initialise a new ESClient and connect to the ES subsystem
     /// - throws: ESClientCreateError in case of error
-    public convenience init() throws {
+    public convenience init(_ name: String? = nil) throws {
         var client: OpaquePointer!
         weak var weakSelf: ESClient?
         let status = es_new_client(&client) { innerClient, rawMessage in
@@ -56,17 +56,19 @@ public final class ESClient: ESClientProtocol {
             }
         }
         
-        try self.init(client: client, native: client, status: status)
+        try self.init(name: name, client: client, native: client, status: status)
         weakSelf = self
     }
     
-    private init(client: ESNativeClient?, native: OpaquePointer, status: es_new_client_result_t) throws {
+    private init(name: String?, client: ESNativeClient?, native: OpaquePointer, status: es_new_client_result_t) throws {
+        let name = name ?? "ESClient"
         guard let client, status == ES_NEW_CLIENT_RESULT_SUCCESS else {
-            throw ESClientCreateError(status: status)
+            throw ESError("es_new_client", result: status, client: name)
         }
         
         _ = validESEvents(client)
         
+        self.name = name
         self.client = client
         self.unsafeNativeClient = native
         self.pathMutes = ESMutePath(client: client)
@@ -79,7 +81,7 @@ public final class ESClient: ESClientProtocol {
             self.timebaseInfo = nil
         }
         
-        self.pathMutes.interestHandler = { [weak self] process in
+        pathMutes.interestHandler = { [weak self] process in
             guard let self else { return .listen() }
             return self.queue.sync { self.pathInterestHandler?(process) ?? .listen() }
         }
@@ -93,6 +95,8 @@ public final class ESClient: ESClientProtocol {
             log.warning("Failed to deleteClient on ESClient.deinit")
         }
     }
+    
+    public var name: String
     
     public var config = Config()
     
@@ -124,8 +128,10 @@ public final class ESClient: ESClientProtocol {
     ///     - events: Array of es_event_type_t to subscribe to
     ///     - returns: Boolean indicating success or error
     /// - Note: Subscribing to new event types does not remove previous subscriptions
-    public func subscribe(_ events: [es_event_type_t]) -> Bool {
-        client.esSubscribe(events) == ES_RETURN_SUCCESS
+    public func subscribe(_ events: [es_event_type_t]) throws {
+        try tryAction("esSubscribe", success: ES_RETURN_SUCCESS) {
+            client.esSubscribe(events)
+        }
     }
     
     /// Unsubscribe from some set of events
@@ -134,28 +140,34 @@ public final class ESClient: ESClientProtocol {
     ///     - returns: Boolean indicating success or error
     /// - Note: Events not included in the given `events` array that were previously subscribed to
     ///         will continue to be subscribed to
-    public func unsubscribe(_ events: [es_event_type_t]) -> Bool {
-        client.esUnsubscribe(events) == ES_RETURN_SUCCESS
+    public func unsubscribe(_ events: [es_event_type_t]) throws {
+        try tryAction("esUnsubscribe", success: ES_RETURN_SUCCESS) {
+            client.esUnsubscribe(events)
+        }
     }
     
     /// Unsubscribe from all events
     /// - Parameters:
     ///     - returns: Boolean indicating success or error
-    public func unsubscribeAll() -> Bool {
-        client.esUnsubscribeAll() == ES_RETURN_SUCCESS
+    public func unsubscribeAll() throws {
+        try tryAction("esUnsubscribe", success: ES_RETURN_SUCCESS) {
+            client.esUnsubscribeAll()
+        }
     }
     
     /// Clear all cached results for all clients.
     /// - Parameters:
     ///     - returns: es_clear_cache_result_t value indicating success or an error
-    public func clearCache() -> es_clear_cache_result_t {
-        client.esClearCache()
+    public func clearCache() throws {
+        try tryAction("esUnsubscribe", success: ES_CLEAR_CACHE_RESULT_SUCCESS) {
+            client.esClearCache()
+        }
     }
     
     // MARK: Interest
     
     /// Perform process filtering, additionally to muting of path and processes.
-    /// Filtering is based on `interest in process with particular executable path`. 
+    /// Filtering is based on `interest in process with particular executable path`.
     /// Designed to be used for granular process filtering by ignoring uninterest events.
     ///
     /// General idea is to mute or ignore processes we are not interested in using their binary paths.
@@ -217,16 +229,17 @@ public final class ESClient: ESClientProtocol {
     ///     - mute: process path to mute.
     ///     - type: path type.
     ///     - events: set of events to mute.
-    public func mute(path: String, type: es_mute_path_type_t, events: ESEventSet = .all) -> Bool {
+    public func mute(path: String, type: es_mute_path_type_t, events: ESEventSet = .all) throws {
         switch type {
         case ES_MUTE_PATH_TYPE_PREFIX, ES_MUTE_PATH_TYPE_LITERAL:
             pathMutes.mute(path, type: type, events: events.events)
-            return true
         default:
             if #available(macOS 12.0, *) {
-                return client.esMutePathEvents(path, type, Array(events.events)) == ES_RETURN_SUCCESS
+                try tryAction("esMutePathEvents", success: ES_RETURN_SUCCESS) {
+                    client.esMutePathEvents(path, type, Array(events.events))
+                }
             } else {
-                return false
+                try tryAction("esMutePathEvents", success: ES_RETURN_SUCCESS) { ES_RETURN_ERROR }
             }
         }
     }
@@ -237,53 +250,65 @@ public final class ESClient: ESClientProtocol {
     ///     - type: path type.
     ///     - events: set of events to unmute.
     @available(macOS 12.0, *)
-    public func unmute(path: String, type: es_mute_path_type_t, events: ESEventSet = .all) -> Bool {
+    public func unmute(path: String, type: es_mute_path_type_t, events: ESEventSet = .all) throws {
         switch type {
         case ES_MUTE_PATH_TYPE_PREFIX, ES_MUTE_PATH_TYPE_LITERAL:
             pathMutes.unmute(path, type: type, events: events.events)
-            return true
         default:
-            return client.esUnmutePathEvents(path, type, Array(events.events)) == ES_RETURN_SUCCESS
+            try tryAction("esUnmutePathEvents", success: ES_RETURN_SUCCESS) {
+                client.esUnmutePathEvents(path, type, Array(events.events))
+            }
         }
-        
     }
     
     /// Unmute all events for all process paths.
-    public func unmuteAllPaths() -> Bool {
-        pathMutes.unmuteAll()
+    public func unmuteAllPaths() throws {
+        try tryAction("unmuteAllPaths", success: ES_RETURN_SUCCESS) {
+            pathMutes.unmuteAll() ? ES_RETURN_SUCCESS : ES_RETURN_ERROR
+        }
     }
     
     /// Unmute all target paths. Works only for macOS 13.0+.
     @available(macOS 13.0, *)
-    public func unmuteAllTargetPaths() -> Bool {
-        client.esUnmuteAllTargetPaths() == ES_RETURN_SUCCESS 
+    public func unmuteAllTargetPaths() throws {
+        try tryAction("esUnmuteAllTargetPaths", success: ES_RETURN_SUCCESS) {
+            client.esUnmuteAllTargetPaths()
+        }
     }
     
     /// Invert the mute state of a given mute dimension.
     @available(macOS 13.0, *)
-    public func invertMuting(_ muteType: es_mute_inversion_type_t) -> Bool {
+    public func invertMuting(_ muteType: es_mute_inversion_type_t) throws {
+        let result: Bool
         switch muteType {
         case ES_MUTE_INVERSION_TYPE_PROCESS:
-            return processMutes.invertMuting()
+            result = processMutes.invertMuting()
         case ES_MUTE_INVERSION_TYPE_PATH:
-            return pathMutes.invertMuting()
+            result = pathMutes.invertMuting()
         default:
-            return client.esInvertMuting(muteType) == ES_RETURN_SUCCESS
+            result = client.esInvertMuting(muteType) == ES_RETURN_SUCCESS
+        }
+        try tryAction("invertMuting(\(muteType))", success: ES_RETURN_SUCCESS) {
+            result ? ES_RETURN_SUCCESS : ES_RETURN_ERROR
         }
     }
     
     /// Mute state of a given mute dimension.
     @available(macOS 13.0, *)
-    public func mutingInverted(_ muteType: es_mute_inversion_type_t) -> Bool {
-        switch client.esMutingInverted(muteType) {
-        case ES_MUTE_INVERTED: return true
-        case ES_MUTE_NOT_INVERTED: return false
-        case ES_MUTE_INVERTED_ERROR: return false
-        default: return false
+    public func mutingInverted(_ muteType: es_mute_inversion_type_t) throws -> Bool {
+        let status = client.esMutingInverted(muteType)
+        switch status {
+        case ES_MUTE_INVERTED:
+            return true
+        case ES_MUTE_NOT_INVERTED:
+            return false
+        default:
+            throw ESError<es_mute_inverted_return_t>("mutingInverted(\(muteType))", result: status, client: name)
         }
     }
     
     // MARK: Private
+
     private var client: ESNativeClient
     private let pathMutes: ESMutePath
     private let processMutes: ESMuteProcess
@@ -407,7 +432,7 @@ extension ESClient {
     internal static func test(newClient: (inout ESNativeClient?, @escaping es_handler_block_t) -> es_new_client_result_t) throws -> ESClient {
         var native: ESNativeClient?
         weak var weakSelf: ESClient?
-        let status = newClient(&native) { innerClient, rawMessage in
+        let status = newClient(&native) { _, rawMessage in
             if let self = weakSelf {
                 let message = ESMessagePtr(unowned: rawMessage)
                 self.handleMessage(message)
@@ -416,7 +441,7 @@ extension ESClient {
             }
         }
         
-        let client = try ESClient(client: native, native: OpaquePointer(bitPattern: 0xDEADBEEF)!, status: status)
+        let client = try ESClient(name: nil, client: native, native: OpaquePointer(bitPattern: 0xdeadbeef)!, status: status)
         weakSelf = client
         
         return client

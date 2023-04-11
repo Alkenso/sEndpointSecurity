@@ -129,93 +129,97 @@ private final class ESXPCExportedObject: NSObject, ESClientXPCProtocol {
             
             completion(ES_NEW_CLIENT_RESULT_SUCCESS)
         } catch {
-            if let error = error as? ESClientCreateError {
-                completion(error.status)
+            if let error = error as? ESError<es_new_client_result_t> {
+                completion(error.result)
             } else {
                 completion(ES_NEW_CLIENT_RESULT_ERR_INTERNAL)
             }
         }
     }
     
-    func subscribe(_ events: [NSNumber], reply: @escaping (Bool) -> Void) {
+    func subscribe(_ events: [NSNumber], reply: @escaping (Error?) -> Void) {
         let converted = events.map(\.uint32Value).map(es_event_type_t.init(rawValue:))
-        reply(client?.subscribe(converted) ?? false)
+        withClient(reply: reply) { try $0.subscribe(converted) }
     }
     
-    func unsubscribe(_ events: [NSNumber], reply: @escaping (Bool) -> Void) {
+    func unsubscribe(_ events: [NSNumber], reply: @escaping (Error?) -> Void) {
         let converted = events.map(\.uint32Value).map(es_event_type_t.init(rawValue:))
-        reply(client?.unsubscribe(converted) ?? false)
+        withClient(reply: reply) { try $0.unsubscribe(converted) }
     }
     
-    func unsubscribeAll(reply: @escaping (Bool) -> Void) {
-        reply(client?.unsubscribeAll() ?? false)
+    func unsubscribeAll(reply: @escaping (Error?) -> Void) {
+        withClient(reply: reply) { try $0.unsubscribeAll() }
     }
     
-    func clearCache(reply: @escaping (es_clear_cache_result_t) -> Void) {
-        reply(client?.clearCache() ?? ES_CLEAR_CACHE_RESULT_ERR_INTERNAL)
+    func clearCache(reply: @escaping (Error?) -> Void) {
+        withClient(reply: reply) { try $0.clearCache() }
     }
     
-    func clearPathInterestCache(reply: @escaping (Bool) -> Void) {
-        reply(client?.clearPathInterestCache() != nil)
+    func clearPathInterestCache(reply: @escaping (Error?) -> Void) {
+        withClient(reply: reply) { $0.clearPathInterestCache() }
     }
     
-    func mute(process mute: Data, events: [NSNumber], reply: @escaping (Bool) -> Void) {
-        if let decoded = ESMuteProcessRule(from: mute, decoder: .json(decoder: xpcDecoder), log: log) {
-            reply(client?.mute(process: decoded, events: .fromNumbers(events)) != nil)
-        } else {
-            reply(false)
+    func mute(process mute: Data, events: [NSNumber], reply: @escaping (Error?) -> Void) {
+        withClient(reply: reply) {
+            let decoded = try xpcDecoder.decode(ESMuteProcessRule.self, from: mute)
+            $0.mute(process: decoded, events: .fromNumbers(events))
         }
     }
     
-    func unmute(process mute: Data, events: [NSNumber], reply: @escaping (Bool) -> Void) {
-        if let decoded = ESMuteProcessRule(from: mute, decoder: .json(decoder: xpcDecoder), log: log) {
-            reply(client?.unmute(process: decoded, events: .fromNumbers(events)) != nil)
-        } else {
-            reply(false)
+    func unmute(process mute: Data, events: [NSNumber], reply: @escaping (Error?) -> Void) {
+        withClient(reply: reply) {
+            let decoded = try xpcDecoder.decode(ESMuteProcessRule.self, from: mute)
+            $0.unmute(process: decoded, events: .fromNumbers(events))
         }
     }
     
-    func unmuteAllProcesses(reply: @escaping (Bool) -> Void) {
-        reply(client?.unmuteAllProcesses() != nil)
+    func unmuteAllProcesses(reply: @escaping (Error?) -> Void) {
+        withClient(reply: reply) { $0.unmuteAllProcesses() }
     }
     
-    func mute(path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Bool) -> Void) {
-        reply(client?.mute(path: path, type: type, events: .fromNumbers(events)) ?? false)
+    func mute(path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Error?) -> Void) {
+        withClient(reply: reply) { try $0.mute(path: path, type: type, events: .fromNumbers(events)) }
     }
     
-    func unmute(path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Bool) -> Void) {
+    func unmute(path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Error?) -> Void) {
         if #available(macOS 12.0, *) {
-            reply(client?.unmute(path: path, type: type, events: .fromNumbers(events)) ?? false)
+            withClient(reply: reply) { try $0.unmute(path: path, type: type, events: .fromNumbers(events)) }
         } else {
-            reply(false)
+            reply(CommonError.unexpected("unmute(path:) not available"))
         }
     }
     
-    func unmuteAllPaths(reply: @escaping (Bool) -> Void) {
-        reply(client?.unmuteAllPaths() ?? false)
+    func unmuteAllPaths(reply: @escaping (Error?) -> Void) {
+        withClient(reply: reply) { try $0.unmuteAllPaths() }
     }
     
-    func unmuteAllTargetPaths(reply: @escaping (Bool) -> Void) {
+    func unmuteAllTargetPaths(reply: @escaping (Error?) -> Void) {
         if #available(macOS 13.0, *) {
-            reply(client?.unmuteAllTargetPaths() ?? false)
+            withClient(reply: reply) { try $0.unmuteAllTargetPaths() }
         } else {
-            reply(false)
+            reply(CommonError.unexpected("unmuteAllTargetPaths not available"))
         }
     }
     
-    func invertMuting(_ muteType: es_mute_inversion_type_t, reply: @escaping (Bool) -> Void) {
+    func invertMuting(_ muteType: es_mute_inversion_type_t, reply: @escaping (Error?) -> Void) {
         if #available(macOS 13.0, *) {
-            reply(client?.invertMuting(muteType) ?? false)
+            withClient(reply: reply) { try $0.invertMuting(muteType) }
         } else {
-            reply(false)
+            reply(CommonError.unexpected("invertMuting not available"))
         }
     }
     
-    func mutingInverted(_ muteType: es_mute_inversion_type_t, reply: @escaping (Bool) -> Void) {
+    func mutingInverted(_ muteType: es_mute_inversion_type_t, reply: @escaping (Bool, Error?) -> Void) {
         if #available(macOS 13.0, *) {
-            reply(client?.mutingInverted(muteType) ?? false)
+            if let result = withClient(
+                reply: { reply(false, $0) },
+                replyOnSuccess: false,
+                body: { try $0.mutingInverted(muteType) }
+            ) {
+                reply(result, nil)
+            }
         } else {
-            reply(false)
+            reply(false, CommonError.unexpected("mutingInverted not available"))
         }
     }
     
@@ -295,6 +299,21 @@ private final class ESXPCExportedObject: NSObject, ESClientXPCProtocol {
             actionHandler(delegateProxy, encoded)
         } catch {
             errorHandler(error)
+        }
+    }
+    
+    @discardableResult
+    private func withClient<R>(reply: @escaping (Error?) -> Void, replyOnSuccess: Bool = true, body: (ESClient) throws -> R) -> R? {
+        do {
+            let client = try client.get(name: "ESClient")
+            let result = try body(client)
+            if replyOnSuccess {
+                reply(nil)
+            }
+            return result
+        } catch {
+            reply(error.xpcCompatible())
+            return nil
         }
     }
 }

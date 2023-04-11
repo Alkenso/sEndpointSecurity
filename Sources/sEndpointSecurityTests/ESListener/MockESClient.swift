@@ -4,6 +4,8 @@ import EndpointSecurity
 import Foundation
 
 class MockESClient: ESClientProtocol {
+    var name: String = "MockESClient"
+    
     var config = ESClient.Config()
     var queue: DispatchQueue?
     
@@ -11,59 +13,33 @@ class MockESClient: ESClientProtocol {
     var postAuthMessageHandler: ((ESMessagePtr, ESClient.ResponseInfo) -> Void)?
     var notifyMessageHandler: ((ESMessagePtr) -> Void)?
     
-    func subscribe(_ events: [es_event_type_t]) -> Bool {
-        true
-    }
+    func subscribe(_ events: [es_event_type_t]) {}
     
-    func unsubscribe(_ events: [es_event_type_t]) -> Bool {
-        true
-    }
+    func unsubscribe(_ events: [es_event_type_t]) {}
     
-    func unsubscribeAll() -> Bool {
-        true
-    }
+    func unsubscribeAll() {}
     
-    func clearCache() -> es_clear_cache_result_t {
-        ES_CLEAR_CACHE_RESULT_SUCCESS
-    }
+    func clearCache() {}
     
     var pathInterestHandler: ((ESProcess) -> ESInterest)?
     
-    func clearPathInterestCache() {
-        
-    }
+    func clearPathInterestCache() {}
     
-    func mute(process rule: ESMuteProcessRule, events: ESEventSet) {
-        
-    }
+    func mute(process rule: ESMuteProcessRule, events: ESEventSet) {}
     
-    func unmute(process rule: ESMuteProcessRule, events: ESEventSet) {
-        
-    }
+    func unmute(process rule: ESMuteProcessRule, events: ESEventSet) {}
     
-    func unmuteAllProcesses() {
-        
-    }
+    func unmuteAllProcesses() {}
     
-    func mute(path: String, type: es_mute_path_type_t, events: ESEventSet) -> Bool {
-        true
-    }
+    func mute(path: String, type: es_mute_path_type_t, events: ESEventSet) {}
     
-    func unmute(path: String, type: es_mute_path_type_t, events: ESEventSet) -> Bool {
-        true
-    }
+    func unmute(path: String, type: es_mute_path_type_t, events: ESEventSet) {}
     
-    func unmuteAllPaths() -> Bool {
-        true
-    }
+    func unmuteAllPaths() {}
     
-    func unmuteAllTargetPaths() -> Bool {
-        true
-    }
+    func unmuteAllTargetPaths() {}
     
-    func invertMuting(_ muteType: es_mute_inversion_type_t) -> Bool {
-        false
-    }
+    func invertMuting(_ muteType: es_mute_inversion_type_t) {}
     
     func mutingInverted(_ muteType: es_mute_inversion_type_t) -> Bool {
         false

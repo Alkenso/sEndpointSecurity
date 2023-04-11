@@ -13,10 +13,7 @@ class ESServiceTests: XCTestCase {
     
     override func setUp() {
         es = MockESClient()
-        service = ESService { [es] in
-            $0 = ES_NEW_CLIENT_RESULT_SUCCESS
-            return es
-        }
+        service = ESService { [es] _ in try es.get() }
     }
     
     func test() {
@@ -36,7 +33,10 @@ class ESServiceTests: XCTestCase {
         s2.notifyMessageHandler = { _ in s2Exp.fulfill() }
         controls.append(service.register(s2))
         
-        XCTAssertEqual(service.activate(), ES_NEW_CLIENT_RESULT_SUCCESS)
+        XCTAssertNoThrow(try service.activate())
+        
+        XCTAssertNotNil(service.unsafeClient as? MockESClient)
+        XCTAssertTrue(service.unsafeClient === es)
         
         for event in [ES_EVENT_TYPE_NOTIFY_PTY_GRANT, ES_EVENT_TYPE_NOTIFY_SETUID, ES_EVENT_TYPE_NOTIFY_EXIT, ES_EVENT_TYPE_NOTIFY_PTY_CLOSE] {
             emitMessage(path: "test1", signingID: "", teamID: "", event: event)
@@ -45,7 +45,7 @@ class ESServiceTests: XCTestCase {
         waitForExpectations()
     }
     
-    func test_suspend_resume() {
+    func test_suspend_resume() throws {
         var s = ESSubscription()
         s.events = [ES_EVENT_TYPE_NOTIFY_PTY_GRANT, ES_EVENT_TYPE_NOTIFY_SETUID]
         var exp = expectation(description: "notify should not called")
@@ -53,7 +53,7 @@ class ESServiceTests: XCTestCase {
         s.notifyMessageHandler = { _ in exp.fulfill() }
         let c = service.register(s, suspended: true)
         
-        XCTAssertEqual(service.activate(), ES_NEW_CLIENT_RESULT_SUCCESS)
+        XCTAssertNoThrow(try service.activate())
         
         for event in [ES_EVENT_TYPE_NOTIFY_PTY_GRANT, ES_EVENT_TYPE_NOTIFY_SETUID] {
             emitMessage(path: "test1", signingID: "", teamID: "", event: event)
@@ -62,7 +62,7 @@ class ESServiceTests: XCTestCase {
         
         exp = expectation(description: "notify called")
         exp.expectedFulfillmentCount = 2
-        c.resume()
+        try c.resume()
         for event in [ES_EVENT_TYPE_NOTIFY_PTY_GRANT, ES_EVENT_TYPE_NOTIFY_SETUID] {
             emitMessage(path: "test1", signingID: "", teamID: "", event: event)
         }
@@ -70,7 +70,7 @@ class ESServiceTests: XCTestCase {
         
         exp = expectation(description: "notify should not called")
         exp.isInverted = true
-        c.suspend()
+        try c.suspend()
         for event in [ES_EVENT_TYPE_NOTIFY_PTY_GRANT, ES_EVENT_TYPE_NOTIFY_SETUID] {
             emitMessage(path: "test1", signingID: "", teamID: "", event: event)
         }
@@ -84,7 +84,7 @@ class ESServiceTests: XCTestCase {
         s.notifyMessageHandler = { _ in exp.fulfill() }
         var c: ESSubscriptionControl? = service.register(s)
         _ = c
-        XCTAssertEqual(service.activate(), ES_NEW_CLIENT_RESULT_SUCCESS)
+        XCTAssertNoThrow(try service.activate())
         
         emitMessage(path: "test1", signingID: "", teamID: "", event: ES_EVENT_TYPE_NOTIFY_PTY_GRANT)
         waitForExpectations()

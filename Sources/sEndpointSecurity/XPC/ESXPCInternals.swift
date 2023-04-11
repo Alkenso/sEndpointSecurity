@@ -27,24 +27,23 @@ import Foundation
 internal protocol ESClientXPCProtocol {
     func create(converterConfig: Data, completion: @escaping (es_new_client_result_t) -> Void)
     
-    func clearPathInterestCache(reply: @escaping (Bool) -> Void)
+    func clearPathInterestCache(reply: @escaping (Error?) -> Void)
     
-    func mute(process mute: Data, events: [NSNumber], reply: @escaping (Bool) -> Void)
-    func unmute(process mute: Data, events: [NSNumber], reply: @escaping (Bool) -> Void)
-    func unmuteAllProcesses(reply: @escaping (Bool) -> Void)
-    func mute(path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Bool) -> Void)
-    func unmute(path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Bool) -> Void)
-    func unmuteAllPaths(reply: @escaping (Bool) -> Void)
-    func unmuteAllTargetPaths(reply: @escaping (Bool) -> Void)
+    func mute(process mute: Data, events: [NSNumber], reply: @escaping (Error?) -> Void)
+    func unmute(process mute: Data, events: [NSNumber], reply: @escaping (Error?) -> Void)
+    func unmuteAllProcesses(reply: @escaping (Error?) -> Void)
+    func mute(path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Error?) -> Void)
+    func unmute(path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Error?) -> Void)
+    func unmuteAllPaths(reply: @escaping (Error?) -> Void)
+    func unmuteAllTargetPaths(reply: @escaping (Error?) -> Void)
     
-    func subscribe(_ events: [NSNumber], reply: @escaping (Bool) -> Void)
-    func unsubscribe(_ events: [NSNumber], reply: @escaping (Bool) -> Void)
-    func unsubscribeAll(reply: @escaping (Bool) -> Void)
-    func clearCache(reply: @escaping (es_clear_cache_result_t) -> Void)
+    func subscribe(_ events: [NSNumber], reply: @escaping (Error?) -> Void)
+    func unsubscribe(_ events: [NSNumber], reply: @escaping (Error?) -> Void)
+    func unsubscribeAll(reply: @escaping (Error?) -> Void)
+    func clearCache(reply: @escaping (Error?) -> Void)
     
-    
-    func invertMuting(_ muteType: es_mute_inversion_type_t, reply: @escaping (Bool) -> Void)
-    func mutingInverted(_ muteType: es_mute_inversion_type_t, reply: @escaping (Bool) -> Void)
+    func invertMuting(_ muteType: es_mute_inversion_type_t, reply: @escaping (Error?) -> Void)
+    func mutingInverted(_ muteType: es_mute_inversion_type_t, reply: @escaping (Bool, Error?) -> Void)
     
     func sendCustomMessage(_ data: Data, reply: @escaping (Data?, Error?) -> Void)
 }

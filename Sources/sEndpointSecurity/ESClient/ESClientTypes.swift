@@ -41,8 +41,22 @@ extension ESAuthResolution {
     public static let denyOnce = ESAuthResolution(result: .auth(false), cache: false)
 }
 
-public struct ESClientCreateError: Error, Codable {
-    public var status: es_new_client_result_t
+public struct ESError<T: RawRepresentable>: Error, Codable where T: Codable {
+    public var action: String
+    public var result: T
+    public var client: String
+    
+    public init(_ action: String, result: T, client: String) {
+        self.action = action
+        self.result = result
+        self.client = client
+    }
+}
+
+extension ESError: CustomStringConvertible {
+    public var description: String {
+        "Failed to \(action) with result \(result) by \(client)"
+    }
 }
 
 extension ESAuthResolution {

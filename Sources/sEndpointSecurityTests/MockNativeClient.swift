@@ -1,10 +1,3 @@
-//
-//  File.swift
-//  
-//
-//  Created by Alkenso (Vladimir Vashurkin) on 01.03.2023.
-//
-
 import EndpointSecurity
 import Foundation
 import sEndpointSecurity
@@ -132,7 +125,7 @@ class MockNativeClient: ESNativeClient {
         return ES_RETURN_SUCCESS
     }
     
-    func esMutedProcesses() -> [audit_token_t : [es_event_type_t]] {
+    func esMutedProcesses() -> [audit_token_t: [es_event_type_t]] {
         processMutes.mapValues { Array($0) }
     }
 }

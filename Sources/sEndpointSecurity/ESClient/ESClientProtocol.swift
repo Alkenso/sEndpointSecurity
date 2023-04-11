@@ -24,34 +24,44 @@ import Combine
 import EndpointSecurity
 import Foundation
 
-public protocol ESClientProtocol: AnyObject {
-    var config: ESClient.Config { get set }
+public protocol ESClientProtocol<Message>: AnyObject {
+    associatedtype Message
+    
+    var name: String { get set }
     var queue: DispatchQueue? { get set }
     
-    var authMessageHandler: ((ESMessagePtr, @escaping (ESAuthResolution) -> Void) -> Void)? { get set }
-    var postAuthMessageHandler: ((ESMessagePtr, ESClient.ResponseInfo) -> Void)? { get set }
-    var notifyMessageHandler: ((ESMessagePtr) -> Void)? { get set }
+    var authMessageHandler: ((Message, @escaping (ESAuthResolution) -> Void) -> Void)? { get set }
+    var notifyMessageHandler: ((Message) -> Void)? { get set }
     
-    func subscribe(_ events: [es_event_type_t]) -> Bool
-    func unsubscribe(_ events: [es_event_type_t]) -> Bool
-    func unsubscribeAll() -> Bool
-    func clearCache() -> es_clear_cache_result_t
+    func subscribe(_ events: [es_event_type_t]) throws
+    func unsubscribe(_ events: [es_event_type_t]) throws
+    func unsubscribeAll() throws
+    func clearCache() throws
     
     var pathInterestHandler: ((ESProcess) -> ESInterest)? { get set }
-    func clearPathInterestCache()
+    func clearPathInterestCache() throws
     
-    func mute(process rule: ESMuteProcessRule, events: ESEventSet)
-    func unmute(process rule: ESMuteProcessRule, events: ESEventSet)
-    func unmuteAllProcesses()
-    func mute(path: String, type: es_mute_path_type_t, events: ESEventSet) -> Bool
+    func mute(process rule: ESMuteProcessRule, events: ESEventSet) throws
+    func unmute(process rule: ESMuteProcessRule, events: ESEventSet) throws
+    func unmuteAllProcesses() throws
+    func mute(path: String, type: es_mute_path_type_t, events: ESEventSet) throws
     @available(macOS 12.0, *)
-    func unmute(path: String, type: es_mute_path_type_t, events: ESEventSet) -> Bool
-    func unmuteAllPaths() -> Bool
+    func unmute(path: String, type: es_mute_path_type_t, events: ESEventSet) throws
+    func unmuteAllPaths() throws
     @available(macOS 13.0, *)
-    func unmuteAllTargetPaths() -> Bool
+    func unmuteAllTargetPaths() throws
     
     @available(macOS 13.0, *)
-    func invertMuting(_ muteType: es_mute_inversion_type_t) -> Bool
+    func invertMuting(_ muteType: es_mute_inversion_type_t) throws
     @available(macOS 13.0, *)
-    func mutingInverted(_ muteType: es_mute_inversion_type_t) -> Bool
+    func mutingInverted(_ muteType: es_mute_inversion_type_t) throws -> Bool
+}
+
+extension ESClientProtocol {
+    internal func tryAction<T: RawRepresentable & Equatable & Codable>(_ action: String, success: T, body: () throws -> T) throws {
+        let result = try body()
+        if result != success {
+            throw ESError<T>(action, result: result, client: name)
+        }
+    }
 }

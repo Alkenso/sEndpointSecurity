@@ -384,7 +384,7 @@ public extension ESConverter {
             return .setreuid(esEvent(setregid: event.setregid))
         case ES_EVENT_TYPE_AUTH_COPYFILE, ES_EVENT_TYPE_NOTIFY_COPYFILE:
             return .copyfile(esEvent(copyfile: event.copyfile))
-            // macOS 13.0:
+        // macOS 13.0:
         case ES_EVENT_TYPE_NOTIFY_AUTHENTICATION:
             return try .authentication(esEvent(authentication: event.authentication))
         case ES_EVENT_TYPE_NOTIFY_XP_MALWARE_DETECTED:
@@ -728,7 +728,6 @@ public extension ESConverter {
         .init(target: esFile(es.target))
     }
     
-
     func esEvent(authentication es: UnsafePointer<es_event_authentication_t>) throws -> ESEvent.Authentication {
         let type: ESEvent.AuthenticationType
         switch es.pointee.type {
@@ -886,5 +885,4 @@ public extension ESConverter {
             item: esBTMLaunchItem(es.pointee.item)
         )
     }
-    
 }

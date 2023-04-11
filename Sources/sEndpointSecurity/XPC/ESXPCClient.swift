@@ -26,25 +26,33 @@ import SwiftConvenience
 
 private let log = SCLogger.internalLog(.xpc)
 
-public final class ESXPCClient {
+public final class ESXPCClient: ESClientProtocol {
     @Atomic private var connection: ESXPCConnection
     private let delegate: ESClientXPCDelegate
-    private var subscribedEvents = Synchronized<Set<es_event_type_t>>(.serial)
+    private let syncExecutor: SynchronousExecutor
+    private let connectionLock = NSRecursiveLock()
 
     // MARK: - Initialization & Activation
 
-    public init(_ createConnection: @escaping @autoclosure () -> NSXPCConnection) {
+    public init(_ name: String = "ESXPCClient", timeout: TimeInterval? = nil, _ createConnection: @escaping @autoclosure () -> NSXPCConnection) {
         let delegate = ESClientXPCDelegate()
         self.connection = ESXPCConnection(delegate: delegate, createConnection: createConnection)
         self.delegate = delegate
+        self.name = name
+        self.syncExecutor = SynchronousExecutor(name, timeout: timeout)
     }
 
     deinit {
         invalidate()
     }
     
+    public var name: String
     public var connectionStateHandler: ((Result<es_new_client_result_t, Error>) -> Void)?
     public var converterConfig: ESConverter.Config = .default
+    public var reconnectDelay: TimeInterval {
+        get { connection.reconnectDelay }
+        set { connection.reconnectDelay = newValue }
+    }
 
     public func activate(completion: @escaping (Result<es_new_client_result_t, Error>) -> Void) {
         activate(async: true, completion: completion)
@@ -74,15 +82,13 @@ public final class ESXPCClient {
     }
     
     private func handleConnectionStateChanged(_ result: Result<es_new_client_result_t, Error>) {
-        let events = Array(subscribedEvents.read())
-        if result.success == ES_NEW_CLIENT_RESULT_SUCCESS, !events.isEmpty {
-            subscribe(events) { _ in }
+        queue.async(flags: .barrier) {
+            self.connectionStateHandler?(result)
         }
-        
-        connectionStateHandler?(result)
     }
 
     // MARK: - ES Client
+
     // MARK: Messages
     
     /// Handler invoked each time AUTH message is coming from EndpointSecurity.
@@ -101,9 +107,10 @@ public final class ESXPCClient {
     ///     - events: Array of es_event_type_t to subscribe to
     ///     - returns: Boolean indicating success or error
     /// - Note: Subscribing to new event types does not remove previous subscriptions
-    public func subscribe(_ events: [es_event_type_t], completion: @escaping (Bool) -> Void) {
-        subscribedEvents.writeAsync { $0.formUnion(events) }
-        remoteObjectProxy(completion)?.subscribe(events.map { NSNumber(value: $0.rawValue) }, reply: completion)
+    public func subscribe(_ events: [es_event_type_t]) throws {
+        try withRemoteClient { client, reply in
+            client.subscribe(events.map { NSNumber(value: $0.rawValue) }, reply: reply)
+        }
     }
     
     /// Unsubscribe from some set of events
@@ -112,24 +119,28 @@ public final class ESXPCClient {
     ///     - returns: Boolean indicating success or error
     /// - Note: Events not included in the given `events` array that were previously subscribed to
     ///         will continue to be subscribed to
-    public func unsubscribe(_ events: [es_event_type_t], completion: @escaping (Bool) -> Void) {
-        subscribedEvents.writeAsync { $0.subtract(events) }
-        remoteObjectProxy(completion)?.unsubscribe(events.map { NSNumber(value: $0.rawValue) }, reply: completion)
+    public func unsubscribe(_ events: [es_event_type_t]) throws {
+        try withRemoteClient { client, reply in
+            client.unsubscribe(events.map { NSNumber(value: $0.rawValue) }, reply: reply)
+        }
     }
     
     /// Unsubscribe from all events
     /// - Parameters:
     ///     - returns: Boolean indicating success or error
-    public func unsubscribeAll(completion: @escaping (Bool) -> Void) {
-        subscribedEvents.writeAsync { $0.removeAll() }
-        remoteObjectProxy(completion)?.unsubscribeAll(reply: completion)
+    public func unsubscribeAll() throws {
+        try withRemoteClient { client, reply in
+            client.unsubscribeAll(reply: reply)
+        }
     }
     
     /// Clear all cached results for all clients.
     /// - Parameters:
     ///     - returns: es_clear_cache_result_t value indicating success or an error
-    public func clearCache(completion: @escaping (es_clear_cache_result_t) -> Void) {
-        remoteObjectProxy { _ in completion(ES_CLEAR_CACHE_RESULT_ERR_INTERNAL) }?.clearCache(reply: completion)
+    public func clearCache() throws {
+        try withRemoteClient { client, reply in
+            client.clearCache(reply: reply)
+        }
     }
     
     // MARK: Interest
@@ -163,8 +174,10 @@ public final class ESXPCClient {
     
     /// Clears the cache related to process interest by path.
     /// All processes will be re-evaluated against mute rules and `pathInterestHandler`.
-    public func clearPathInterestCache(completion: @escaping (Bool) -> Void) {
-        remoteObjectProxy(completion)?.clearPathInterestCache(reply: completion)
+    public func clearPathInterestCache() throws {
+        try withRemoteClient { client, reply in
+            client.clearPathInterestCache(reply: reply)
+        }
     }
     
     // MARK: Mute
@@ -173,9 +186,10 @@ public final class ESXPCClient {
     /// - Parameters:
     ///     - mute: process to mute.
     ///     - events: set of events to mute.
-    public func mute(process rule: ESMuteProcessRule, events: ESEventSet = .all, completion: @escaping (Bool) -> Void) {
-        if let (proxy, encoded) = withEncoded(rule, actionName: "muteProcess", reply: completion) {
-            proxy.mute(process: encoded, events: events.asNumbers, reply: completion)
+    public func mute(process rule: ESMuteProcessRule, events: ESEventSet = .all) throws {
+        let encoded = try xpcEncoder.encode(rule)
+        try withRemoteClient { client, reply in
+            client.mute(process: encoded, events: events.asNumbers, reply: reply)
         }
     }
     
@@ -183,15 +197,18 @@ public final class ESXPCClient {
     /// - Parameters:
     ///     - mute: process to unmute.
     ///     - events: set of events to mute.
-    public func unmute(process rule: ESMuteProcessRule, events: ESEventSet = .all, completion: @escaping (Bool) -> Void) {
-        if let (proxy, encoded) = withEncoded(rule, actionName: "unmuteProcess", reply: completion) {
-            proxy.mute(process: encoded, events: events.asNumbers, reply: completion)
+    public func unmute(process rule: ESMuteProcessRule, events: ESEventSet = .all) throws {
+        let encoded = try xpcEncoder.encode(rule)
+        try withRemoteClient { client, reply in
+            client.unmute(process: encoded, events: events.asNumbers, reply: reply)
         }
     }
     
     /// Unmute all events for all processes. Clear the rules.
-    public func unmuteAllProcesses(completion: @escaping (Bool) -> Void) {
-        remoteObjectProxy(completion)?.unmuteAllProcesses(reply: completion)
+    public func unmuteAllProcesses() throws {
+        try withRemoteClient { client, reply in
+            client.unmuteAllProcesses(reply: reply)
+        }
     }
     
     /// Suppress events for the the given at path and type.
@@ -199,8 +216,10 @@ public final class ESXPCClient {
     ///     - mute: process path to mute.
     ///     - type: path type.
     ///     - events: set of events to mute.
-    public func mute(path: String, type: es_mute_path_type_t, events: ESEventSet = .all, completion: @escaping (Bool) -> Void) {
-        remoteObjectProxy(completion)?.mute(path: path, type: type, events: events.asNumbers, reply: completion)
+    public func mute(path: String, type: es_mute_path_type_t, events: ESEventSet = .all) throws {
+        try withRemoteClient { client, reply in
+            client.mute(path: path, type: type, events: events.asNumbers, reply: reply)
+        }
     }
     
     /// Unmute events for the given at path and type.
@@ -209,31 +228,43 @@ public final class ESXPCClient {
     ///     - type: path type.
     ///     - events: set of events to unmute.
     @available(macOS 12.0, *)
-    public func unmute(path: String, type: es_mute_path_type_t, events: ESEventSet = .all, completion: @escaping (Bool) -> Void) {
-        remoteObjectProxy(completion)?.unmute(path: path, type: type, events: events.asNumbers, reply: completion)
+    public func unmute(path: String, type: es_mute_path_type_t, events: ESEventSet = .all) throws {
+        try withRemoteClient { client, reply in
+            client.unmute(path: path, type: type, events: events.asNumbers, reply: reply)
+        }
     }
     
     /// Unmute all events for all process paths.
-    public func unmuteAllPaths(completion: @escaping (Bool) -> Void) {
-        remoteObjectProxy(completion)?.unmuteAllPaths(reply: completion)
+    public func unmuteAllPaths() throws {
+        try withRemoteClient { client, reply in
+            client.unmuteAllPaths(reply: reply)
+        }
     }
     
     /// Unmute all target paths. Works only for macOS 13.0+.
     @available(macOS 13.0, *)
-    public func unmuteAllTargetPaths(completion: @escaping (Bool) -> Void) {
-        remoteObjectProxy(completion)?.unmuteAllTargetPaths(reply: completion)
+    public func unmuteAllTargetPaths() throws {
+        try withRemoteClient { client, reply in
+            client.unmuteAllTargetPaths(reply: reply)
+        }
     }
     
     /// Invert the mute state of a given mute dimension.
     @available(macOS 13.0, *)
-    public func invertMuting(_ muteType: es_mute_inversion_type_t, completion: @escaping (Bool) -> Void) {
-        remoteObjectProxy(completion)?.invertMuting(muteType, reply: completion)
+    public func invertMuting(_ muteType: es_mute_inversion_type_t) throws {
+        try withRemoteClient { client, reply in
+            client.invertMuting(muteType, reply: reply)
+        }
     }
     
     /// Mute state of a given mute dimension.
     @available(macOS 13.0, *)
-    public func mutingInverted(_ muteType: es_mute_inversion_type_t, completion: @escaping (Bool) -> Void) {
-        remoteObjectProxy(completion)?.mutingInverted(muteType, reply: completion)
+    public func mutingInverted(_ muteType: es_mute_inversion_type_t) throws -> Bool {
+        try withRemoteClient { client, reply in
+            client.mutingInverted(muteType) {
+                reply(Result(success: $0, failure: $1))
+            }
+        }
     }
     
     // MARK: - Custom Messages
@@ -250,19 +281,33 @@ public final class ESXPCClient {
     
     // MARK: Utils
     
-    private func remoteObjectProxy(_ errorHandler: @escaping (Bool) -> Void) -> ESClientXPCProtocol? {
-        connection.remoteObjectProxy { _ in errorHandler(false) }
+    private func withRemoteClient(
+        _ function: String = #function,
+        body: @escaping (ESClientXPCProtocol, @escaping (Error?) -> Void) throws -> Void
+    ) throws {
+        _ = try withRemoteClient(function) { client, reply in
+            try body(client) { reply($0.flatMap(Result.failure) ?? .success(())) }
+        }
+        
+        try connectionLock.withLock {
+            try syncExecutor { callback in
+                let proxy = try connection.remoteObjectProxy { callback($0) }
+                    .get(name: "ESXPCConnection", description: "ES XPC client is not connected")
+                try body(proxy, callback)
+            }
+        }
     }
     
-    private func withEncoded(
-        _ value: Encodable, actionName: String, reply: @escaping (Bool) -> Void
-    ) -> (ESClientXPCProtocol, Data)? {
-        guard let proxy = remoteObjectProxy(reply) else { return nil }
-        do {
-            let encoded = try xpcEncoder.encode(value)
-            return (proxy, encoded)
-        } catch {
-            return nil
+    private func withRemoteClient<T>(
+        _ function: String = #function,
+        body: @escaping (ESClientXPCProtocol, @escaping (Result<T, Error>) -> Void) throws -> Void
+    ) throws -> T {
+        try connectionLock.withLock {
+            try syncExecutor { (callback: @escaping (Result<T, Error>) -> Void) in
+                let proxy = try connection.remoteObjectProxy { callback(.failure($0)) }
+                    .get(name: "ESXPCConnection", description: "ES XPC client is not connected")
+                try body(proxy, callback)
+            }
         }
     }
 }

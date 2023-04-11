@@ -81,27 +81,25 @@ public final class ESSubscriptionControl {
     deinit {
         let resumeCount = OSAtomicAdd64(0, &sharedState.resumeCount)
         if resumeCount > 0 {
-            _ = _suspend()
+            _ = try? _suspend()
             OSAtomicAdd64(-resumeCount, &sharedState.resumeCount)
         }
     }
     
-    internal var _resume: () -> Bool = { false }
-    internal var _suspend: () -> Bool = { false }
+    internal var _resume: () throws -> Void = {}
+    internal var _suspend: () throws -> Void = {}
     
     /// Resume receiving ES events into `authMessageHandler` and `notifyMessageHandler`.
-    @discardableResult
-    public func resume() -> Bool {
-        guard OSAtomicAdd64(1, &sharedState.resumeCount) == 1 else { return true }
-        return _resume()
+    public func resume() throws {
+        guard OSAtomicAdd64(1, &sharedState.resumeCount) == 1 else { return }
+        try _resume()
     }
     
     /// Suspend receiving ES events into `authMessageHandler` and `notifyMessageHandler`.
     /// `pathInterestHandler` will be still called when needed.
-    @discardableResult
-    public func suspend() -> Bool {
-        guard OSAtomicAdd64(-1, &sharedState.resumeCount) == 0 else { return true }
-        return _suspend()
+    public func suspend() throws {
+        guard OSAtomicAdd64(-1, &sharedState.resumeCount) == 0 else { return }
+        try _suspend()
     }
 }
 
