@@ -44,7 +44,7 @@ private let log = SCLogger.internalLog(.service)
 /// All subscriptions, mutes, etc. are kept.
 /// 2. After `activate`, all subscriptions that are not suspended would receive ES events.
 /// Suspended subscriptions would NOT receive events while they remain suspended.
-public final class ESService {
+public final class ESService: ESServiceRegistering {
     private typealias Client = any ESClientProtocol
     private let createES: (String, ESServiceSubscriptionStore) throws -> Client
     private let store = ESServiceSubscriptionStore()
@@ -104,7 +104,7 @@ public final class ESService {
     /// At the moment registration is one-way operation.
     ///
     /// The caller must own returned `ESSubscriptionControl` to keep events coming.
-    public func register(_ subscription: ESSubscription, suspended: Bool = false) -> ESSubscriptionControl {
+    public func register(_ subscription: ESSubscription, suspended: Bool) -> ESSubscriptionControl {
         let token = ESSubscriptionControl(suspended: suspended)
         guard !subscription.events.isEmpty else {
             assertionFailure("Registering subscription with no events is prohibited")
@@ -261,5 +261,15 @@ public final class ESService {
         } else {
             throw CommonError.unexpected("Trying to call \(function) on non-activated ESService")
         }
+    }
+}
+
+public protocol ESServiceRegistering {
+    func register(_ subscription: ESSubscription, suspended: Bool) -> ESSubscriptionControl
+}
+
+extension ESServiceRegistering {
+    public func register(_ subscription: ESSubscription) -> ESSubscriptionControl {
+        register(subscription, suspended: false)
     }
 }
