@@ -34,7 +34,7 @@ public final class ESXPCClient: ESClientProtocol {
 
     // MARK: - Initialization & Activation
 
-    public init(_ name: String = "ESXPCClient", timeout: TimeInterval? = nil, _ createConnection: @escaping @autoclosure () -> NSXPCConnection) {
+    public init(name: String = "ESXPCClient", timeout: TimeInterval? = nil, _ createConnection: @escaping @autoclosure () -> NSXPCConnection) {
         let delegate = ESClientXPCDelegate()
         self.connection = ESXPCConnection(delegate: delegate, createConnection: createConnection)
         self.delegate = delegate
