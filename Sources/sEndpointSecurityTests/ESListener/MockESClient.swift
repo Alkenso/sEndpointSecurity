@@ -13,11 +13,19 @@ class MockESClient: ESClientProtocol {
     var postAuthMessageHandler: ((ESMessagePtr, ESClient.ResponseInfo) -> Void)?
     var notifyMessageHandler: ((ESMessagePtr) -> Void)?
     
-    func subscribe(_ events: [es_event_type_t]) {}
+    var subscriptions: Set<es_event_type_t> = []
     
-    func unsubscribe(_ events: [es_event_type_t]) {}
+    func subscribe(_ events: [es_event_type_t]) {
+        subscriptions.formUnion(events)
+    }
     
-    func unsubscribeAll() {}
+    func unsubscribe(_ events: [es_event_type_t]) {
+        subscriptions.subtract(events)
+    }
+    
+    func unsubscribeAll() {
+        subscriptions.removeAll()
+    }
     
     func clearCache() {}
     

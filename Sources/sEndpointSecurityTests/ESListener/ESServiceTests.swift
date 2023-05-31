@@ -45,7 +45,7 @@ class ESServiceTests: XCTestCase {
         waitForExpectations()
     }
     
-    func test_suspend_resume() throws {
+    func test_subscribe_unsubscribe() throws {
         var s = ESSubscription()
         s.events = [ES_EVENT_TYPE_NOTIFY_PTY_GRANT, ES_EVENT_TYPE_NOTIFY_SETUID]
         var exp = expectation(description: "notify should not called")
@@ -75,6 +75,32 @@ class ESServiceTests: XCTestCase {
             emitMessage(path: "test1", signingID: "", teamID: "", event: event)
         }
         waitForExpectations()
+    }
+    
+    func test_subscribe_unsubscribe_multiclient() throws {
+        var s1 = ESSubscription()
+        s1.events = [ES_EVENT_TYPE_NOTIFY_OPEN, ES_EVENT_TYPE_NOTIFY_CLOSE]
+        let c1 = service.register(s1, suspended: true)
+        
+        var s2 = ESSubscription()
+        s2.events = [ES_EVENT_TYPE_NOTIFY_OPEN, ES_EVENT_TYPE_NOTIFY_EXIT]
+        let c2 = service.register(s2, suspended: true)
+        
+        try service.activate()
+        
+        XCTAssertEqual(es.subscriptions, [])
+        
+        try c1.subscribe()
+        XCTAssertEqual(es.subscriptions, [ES_EVENT_TYPE_NOTIFY_OPEN, ES_EVENT_TYPE_NOTIFY_CLOSE])
+        
+        try c2.subscribe()
+        XCTAssertEqual(es.subscriptions, [ES_EVENT_TYPE_NOTIFY_OPEN, ES_EVENT_TYPE_NOTIFY_CLOSE, ES_EVENT_TYPE_NOTIFY_EXIT])
+        
+        try c1.unsubscribe()
+        XCTAssertEqual(es.subscriptions, [ES_EVENT_TYPE_NOTIFY_OPEN, ES_EVENT_TYPE_NOTIFY_EXIT])
+        
+        try c2.unsubscribe()
+        XCTAssertEqual(es.subscriptions, [])
     }
     
     func test_controlDeinit() {

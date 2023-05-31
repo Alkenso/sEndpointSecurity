@@ -145,7 +145,7 @@ internal final class ESServiceSubscriptionStore {
     @inline(__always)
     private func subscriptions(for event: es_event_type_t, path: @autoclosure () -> String) -> [Entry] {
         guard let eventSubscriptions = subscriptionEvents[event] else { return [] }
-        let activeSubscriptions = eventSubscriptions.filter { !$0.state.isSuspended }
+        let activeSubscriptions = eventSubscriptions.filter { $0.state.isSubscribed }
         guard !activeSubscriptions.isEmpty else { return [] }
         
         let path = path()

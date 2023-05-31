@@ -49,6 +49,7 @@ public final class ESService: ESServiceRegistering {
     private let createES: (String, ESServiceSubscriptionStore) throws -> Client
     private let store = ESServiceSubscriptionStore()
     private var client: Client?
+    private var unsubscribeEventsLock = os_unfair_lock()
     
     public convenience init() {
         self.init(createES: ESClient.init)
@@ -105,7 +106,7 @@ public final class ESService: ESServiceRegistering {
     ///
     /// The caller must retain returned `ESSubscriptionControl` to keep events coming.
     public func register(_ subscription: ESSubscription, suspended: Bool) -> ESSubscriptionControl {
-        let token = ESSubscriptionControl(suspended: suspended)
+        let token = ESSubscriptionControl(subscribed: !suspended)
         guard !subscription.events.isEmpty else {
             assertionFailure("Registering subscription with no events is prohibited")
             return token
@@ -114,11 +115,14 @@ public final class ESService: ESServiceRegistering {
         token._subscribe = { [weak self, events = subscription.events] in
             try self?.client?.subscribe(events)
         }
-        token._unsubscribe = { [weak self, events = subscription.events] in
+        token._unsubscribe = { [weak self, events = subscription.events, id = subscription.id] in
             guard let self else { return }
             
-            let uniqueEvents = self.store.subscriptions
-                .reduce(into: Set(events)) { $0.subtract($1.subscription.events) }
+            let uniqueEvents = self.unsubscribeEventsLock.withLock {
+                self.store.subscriptions
+                    .filter { $0.state.isSubscribed && $0.subscription.id != id }
+                    .reduce(into: Set(events)) { $0.subtract($1.subscription.events) }
+            }
             guard !uniqueEvents.isEmpty else { return }
             
             try self.client?.unsubscribe(Array(uniqueEvents))
@@ -127,7 +131,7 @@ public final class ESService: ESServiceRegistering {
         store.addSubscription(subscription, state: token.sharedState)
         
         if let client {
-            if !token.sharedState.isSuspended {
+            if token.sharedState.isSubscribed {
                 try? client.subscribe(subscription.events)
             }
             try? client.clearCache()
@@ -159,7 +163,7 @@ public final class ESService: ESServiceRegistering {
             try preSubscriptionHandler?()
             
             let events = store.subscriptions
-                .filter { !$0.state.isSuspended }
+                .filter { $0.state.isSubscribed }
                 .reduce(into: Set()) { $0.formUnion($1.subscription.events) }
             if !events.isEmpty {
                 try client.subscribe(Array(events))
