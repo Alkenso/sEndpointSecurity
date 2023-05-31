@@ -27,6 +27,7 @@ import SwiftConvenience
 public struct ESSubscription {
     public init() {}
     
+    /// Set of events to subscribe on.
     public var events: [es_event_type_t] = []
     
     /// Queue where `pathInterestHandler`, `authMessageHandler`
@@ -74,39 +75,49 @@ public final class ESSubscriptionControl {
     let sharedState = SubscriptionState()
     
     init(suspended: Bool) {
-        sharedState.resumeCount = suspended ? 0 : 1
+        sharedState.suspended = suspended
         sharedState.control = self
     }
     
     deinit {
-        let resumeCount = OSAtomicAdd64(0, &sharedState.resumeCount)
-        if resumeCount > 0 {
-            _ = try? _suspend()
-            OSAtomicAdd64(-resumeCount, &sharedState.resumeCount)
+        sharedState.lock.withLock {
+            if !sharedState.suspended {
+                _ = try? _unsubscribe()
+            }
+            sharedState.suspended = true
         }
     }
     
-    internal var _resume: () throws -> Void = {}
-    internal var _suspend: () throws -> Void = {}
+    internal var _subscribe: () throws -> Void = {}
+    internal var _unsubscribe: () throws -> Void = {}
+    
+    public var isSubscribed: Bool { !sharedState.isSuspended }
     
     /// Resume receiving ES events into `authMessageHandler` and `notifyMessageHandler`.
-    public func resume() throws {
-        guard OSAtomicAdd64(1, &sharedState.resumeCount) == 1 else { return }
-        try _resume()
+    public func subscribe() throws {
+        try sharedState.lock.withLock {
+            guard sharedState.suspended else { return }
+            try _subscribe()
+            sharedState.suspended = false
+        }
     }
     
     /// Suspend receiving ES events into `authMessageHandler` and `notifyMessageHandler`.
     /// `pathInterestHandler` will be still called when needed.
-    public func suspend() throws {
-        guard OSAtomicAdd64(-1, &sharedState.resumeCount) == 0 else { return }
-        try _suspend()
+    public func unsubscribe() throws {
+        try sharedState.lock.withLock {
+            guard !sharedState.suspended else { return }
+            try _unsubscribe()
+            sharedState.suspended = true
+        }
     }
 }
 
 internal final class SubscriptionState {
-    fileprivate var resumeCount: Int64 = 0
+    fileprivate var suspended = false
     fileprivate weak var control: ESSubscriptionControl?
+    fileprivate var lock = os_unfair_lock()
     
-    var isSuspended: Bool { OSAtomicAdd64(0, &resumeCount) < 1 }
+    var isSuspended: Bool { lock.withLock { suspended } }
     var isAlive: Bool { control != nil }
 }

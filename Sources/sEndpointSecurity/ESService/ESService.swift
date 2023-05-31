@@ -103,7 +103,7 @@ public final class ESService: ESServiceRegistering {
     /// Registers the subscription. MUST be called before `activate`.
     /// At the moment registration is one-way operation.
     ///
-    /// The caller must own returned `ESSubscriptionControl` to keep events coming.
+    /// The caller must retain returned `ESSubscriptionControl` to keep events coming.
     public func register(_ subscription: ESSubscription, suspended: Bool) -> ESSubscriptionControl {
         let token = ESSubscriptionControl(suspended: suspended)
         guard !subscription.events.isEmpty else {
@@ -111,10 +111,10 @@ public final class ESService: ESServiceRegistering {
             return token
         }
         
-        token._resume = { [weak self, events = subscription.events] in
+        token._subscribe = { [weak self, events = subscription.events] in
             try self?.client?.subscribe(events)
         }
-        token._suspend = { [weak self, events = subscription.events] in
+        token._unsubscribe = { [weak self, events = subscription.events] in
             guard let self else { return }
             
             let uniqueEvents = self.store.subscriptions
@@ -266,10 +266,4 @@ public final class ESService: ESServiceRegistering {
 
 public protocol ESServiceRegistering {
     func register(_ subscription: ESSubscription, suspended: Bool) -> ESSubscriptionControl
-}
-
-extension ESServiceRegistering {
-    public func register(_ subscription: ESSubscription) -> ESSubscriptionControl {
-        register(subscription, suspended: false)
-    }
 }
