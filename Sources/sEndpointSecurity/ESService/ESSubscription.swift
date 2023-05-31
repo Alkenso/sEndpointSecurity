@@ -76,8 +76,7 @@ public struct ESSubscription {
 public final class ESSubscriptionControl {
     let sharedState = SubscriptionState()
     
-    init(subscribed: Bool) {
-        sharedState.subscribed = subscribed ? 1 : 0
+    init() {
         sharedState.control = self
     }
     

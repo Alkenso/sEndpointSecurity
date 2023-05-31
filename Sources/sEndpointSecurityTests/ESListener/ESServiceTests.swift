@@ -24,15 +24,16 @@ class ESServiceTests: XCTestCase {
         let s1Exp = expectation(description: "s1 notify called")
         s1Exp.expectedFulfillmentCount = 2
         s1.notifyMessageHandler = { _ in s1Exp.fulfill() }
-        controls.append(service.register(s1, suspended: false))
+        controls.append(service.register(s1))
         
         var s2 = ESSubscription()
         s2.events = [ES_EVENT_TYPE_NOTIFY_PTY_GRANT, ES_EVENT_TYPE_NOTIFY_EXIT]
         let s2Exp = expectation(description: "s2 notify called")
         s2Exp.expectedFulfillmentCount = 2
         s2.notifyMessageHandler = { _ in s2Exp.fulfill() }
-        controls.append(service.register(s2, suspended: false))
+        controls.append(service.register(s2))
         
+        XCTAssertNoThrow(try controls.forEach { try $0.subscribe() })
         XCTAssertNoThrow(try service.activate())
         
         XCTAssertNotNil(service.unsafeClient as? MockESClient)
@@ -51,7 +52,7 @@ class ESServiceTests: XCTestCase {
         var exp = expectation(description: "notify should not called")
         exp.isInverted = true
         s.notifyMessageHandler = { _ in exp.fulfill() }
-        let c = service.register(s, suspended: true)
+        let c = service.register(s)
         
         XCTAssertNoThrow(try service.activate())
         
@@ -80,11 +81,11 @@ class ESServiceTests: XCTestCase {
     func test_subscribe_unsubscribe_multiclient() throws {
         var s1 = ESSubscription()
         s1.events = [ES_EVENT_TYPE_NOTIFY_OPEN, ES_EVENT_TYPE_NOTIFY_CLOSE]
-        let c1 = service.register(s1, suspended: true)
+        let c1 = service.register(s1)
         
         var s2 = ESSubscription()
         s2.events = [ES_EVENT_TYPE_NOTIFY_OPEN, ES_EVENT_TYPE_NOTIFY_EXIT]
-        let c2 = service.register(s2, suspended: true)
+        let c2 = service.register(s2)
         
         try service.activate()
         
@@ -108,8 +109,8 @@ class ESServiceTests: XCTestCase {
         s.events = [ES_EVENT_TYPE_NOTIFY_PTY_GRANT]
         var exp = expectation(description: "notify called")
         s.notifyMessageHandler = { _ in exp.fulfill() }
-        var c: ESSubscriptionControl? = service.register(s, suspended: false)
-        _ = c
+        var c: ESSubscriptionControl? = service.register(s)
+        XCTAssertNoThrow(try c?.subscribe())
         XCTAssertNoThrow(try service.activate())
         
         emitMessage(path: "test1", signingID: "", teamID: "", event: ES_EVENT_TYPE_NOTIFY_PTY_GRANT)

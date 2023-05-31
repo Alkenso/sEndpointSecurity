@@ -49,7 +49,8 @@ public final class ESService: ESServiceRegistering {
     private let createES: (String, ESServiceSubscriptionStore) throws -> Client
     private let store = ESServiceSubscriptionStore()
     private var client: Client?
-    private var unsubscribeEventsLock = os_unfair_lock()
+    private var isActivated = false
+    private var activationLock = os_unfair_lock()
     
     public convenience init() {
         self.init(createES: ESClient.init)
@@ -105,35 +106,40 @@ public final class ESService: ESServiceRegistering {
     /// At the moment registration is one-way operation.
     ///
     /// The caller must retain returned `ESSubscriptionControl` to keep events coming.
-    public func register(_ subscription: ESSubscription, suspended: Bool) -> ESSubscriptionControl {
-        let token = ESSubscriptionControl(subscribed: !suspended)
+    public func register(_ subscription: ESSubscription) -> ESSubscriptionControl {
+        let token = ESSubscriptionControl()
         guard !subscription.events.isEmpty else {
             assertionFailure("Registering subscription with no events is prohibited")
             return token
         }
         
         token._subscribe = { [weak self, events = subscription.events] in
-            try self?.client?.subscribe(events)
+            guard let self else { return }
+            try self.activationLock.withLock {
+                guard self.isActivated else { return }
+                try self.client?.subscribe(events)
+            }
         }
         token._unsubscribe = { [weak self, events = subscription.events, id = subscription.id] in
             guard let self else { return }
             
-            let uniqueEvents = self.unsubscribeEventsLock.withLock {
-                self.store.subscriptions
+            try self.activationLock.withLock {
+                guard self.isActivated else { return }
+                
+                let uniqueEvents = self.store.subscriptions
                     .filter { $0.state.isSubscribed && $0.subscription.id != id }
                     .reduce(into: Set(events)) { $0.subtract($1.subscription.events) }
+                guard !uniqueEvents.isEmpty else { return }
+                
+                try self.client?.unsubscribe(Array(uniqueEvents))
             }
-            guard !uniqueEvents.isEmpty else { return }
-            
-            try self.client?.unsubscribe(Array(uniqueEvents))
         }
         
-        store.addSubscription(subscription, state: token.sharedState)
+        activationLock.withLock {
+            store.addSubscription(subscription, state: token.sharedState)
+        }
         
         if let client {
-            if token.sharedState.isSubscribed {
-                try? client.subscribe(subscription.events)
-            }
             try? client.clearCache()
             try? client.clearPathInterestCache()
         }
@@ -146,12 +152,11 @@ public final class ESService: ESServiceRegistering {
     /// - Warning: Do NOT call `activate` or `invalidate` routines from the handler.
     public var preSubscriptionHandler: (() throws -> Void)?
     
-    /// Activates the service. On success all resumed subscriptions would start receiving ES events.
+    /// Activates the service. On success all subscriptions would start receiving ES events if subscibed.
     public func activate() throws {
-        guard client == nil else { return }
+        guard !activationLock.withLock({ isActivated }) else { return }
         
         let client = try createES("ESService_\(ObjectIdentifier(self))", store)
-        self.client = client
         
         /// `authMessageHandler` and `notifyMessageHandler` are set in `createES` function
         /// due to generic nature of underlying `Client` instance.
@@ -159,14 +164,20 @@ public final class ESService: ESServiceRegistering {
             .combine(.restrictive, [store.pathInterest(in: $0), pathInterestHandler($0)]) ?? .listen()
         }
         
+        self.client = client
+        
         do {
             try preSubscriptionHandler?()
             
-            let events = store.subscriptions
-                .filter { $0.state.isSubscribed }
-                .reduce(into: Set()) { $0.formUnion($1.subscription.events) }
-            if !events.isEmpty {
-                try client.subscribe(Array(events))
+            try activationLock.withLock {
+                let events = store.subscriptions
+                    .filter { $0.state.isSubscribed }
+                    .reduce(into: Set()) { $0.formUnion($1.subscription.events) }
+                if !events.isEmpty {
+                    try client.subscribe(Array(events))
+                }
+                
+                isActivated = true
             }
         } catch {
             self.client = nil
@@ -177,8 +188,11 @@ public final class ESService: ESServiceRegistering {
     /// Invalidates the service. Discards underlying `es_client`, clears all mutes.
     /// Registrations are kept.
     public func invalidate() {
-        try? client?.unsubscribeAll()
-        client = nil
+        activationLock.withLock {
+            try? client?.unsubscribeAll()
+            client = nil
+            isActivated = false
+        }
     }
     
     /// Config used to convert native `es_message_t` into `ESMessage`.
@@ -269,5 +283,5 @@ public final class ESService: ESServiceRegistering {
 }
 
 public protocol ESServiceRegistering {
-    func register(_ subscription: ESSubscription, suspended: Bool) -> ESSubscriptionControl
+    func register(_ subscription: ESSubscription) -> ESSubscriptionControl
 }
