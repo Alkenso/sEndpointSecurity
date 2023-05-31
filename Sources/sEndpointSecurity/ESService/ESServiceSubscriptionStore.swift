@@ -70,7 +70,7 @@ internal final class ESServiceSubscriptionStore {
         for entry in subscriptions {
             guard entry.state.isAlive else { continue }
             
-            let interest = entry.subscription.pathInterestHandler(process)
+            let interest = entry.subscription.queue.sync { entry.subscription.pathInterestHandler(process) }
             resolutions.append(interest)
             
             let identifier = ObjectIdentifier(entry)
@@ -116,7 +116,11 @@ internal final class ESServiceSubscriptionStore {
         }
         
         let group = ESMultipleResolution(count: subscribers.count, reply: reply)
-        subscribers.forEach { $0.subscription.authMessageHandler(message, group.resolve) }
+        subscribers.forEach { entry in
+            entry.subscription.queue.async {
+                entry.subscription.authMessageHandler(message, group.resolve)
+            }
+        }
     }
     
     func handleNotifyMessage(_ rawMessage: ESMessagePtr) {
@@ -139,7 +143,11 @@ internal final class ESServiceSubscriptionStore {
         guard !subscribers.isEmpty else { return }
         guard let message = message() else { return }
         
-        subscribers.forEach { $0.subscription.notifyMessageHandler(message) }
+        subscribers.forEach { entry in
+            entry.subscription.queue.async {
+                entry.subscription.notifyMessageHandler(message)
+            }
+        }
     }
     
     @inline(__always)

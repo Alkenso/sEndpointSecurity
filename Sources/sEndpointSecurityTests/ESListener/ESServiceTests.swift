@@ -21,16 +21,26 @@ class ESServiceTests: XCTestCase {
         
         var s1 = ESSubscription()
         s1.events = [ES_EVENT_TYPE_NOTIFY_PTY_GRANT, ES_EVENT_TYPE_NOTIFY_SETUID]
+        let q1 = DispatchQueue(label: "")
+        s1.queue = q1
         let s1Exp = expectation(description: "s1 notify called")
         s1Exp.expectedFulfillmentCount = 2
-        s1.notifyMessageHandler = { _ in s1Exp.fulfill() }
+        s1.notifyMessageHandler = { _ in
+            dispatchPrecondition(condition: .onQueue(q1))
+            s1Exp.fulfill()
+        }
         controls.append(service.register(s1))
         
         var s2 = ESSubscription()
         s2.events = [ES_EVENT_TYPE_NOTIFY_PTY_GRANT, ES_EVENT_TYPE_NOTIFY_EXIT]
+        let q2 = DispatchQueue(label: "")
+        s2.queue = q2
         let s2Exp = expectation(description: "s2 notify called")
         s2Exp.expectedFulfillmentCount = 2
-        s2.notifyMessageHandler = { _ in s2Exp.fulfill() }
+        s2.notifyMessageHandler = { _ in
+            dispatchPrecondition(condition: .onQueue(q2))
+            s2Exp.fulfill()
+        }
         controls.append(service.register(s2))
         
         XCTAssertNoThrow(try controls.forEach { try $0.subscribe() })
