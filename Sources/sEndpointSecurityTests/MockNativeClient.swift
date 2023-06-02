@@ -15,6 +15,8 @@ class MockNativeClient: ESNativeClient {
     var processMutes: [audit_token_t: Set<es_event_type_t>] = [:]
     var responses: [UInt64: ESAuthResolution] = [:]
     
+    var native: OpaquePointer { OpaquePointer(bitPattern: 0xdeadbeef)! }
+    
     func esRespond(_ message: UnsafePointer<es_message_t>, flags: UInt32, cache: Bool) -> es_respond_result_t {
         responses[message.pointee.global_seq_num] = ESAuthResolution(result: .flags(flags), cache: cache)
         return ES_RESPOND_RESULT_SUCCESS

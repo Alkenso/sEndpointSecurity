@@ -45,7 +45,7 @@ public final class ESClient: ESClientProtocol {
     /// Initialise a new ESClient and connect to the ES subsystem
     /// - throws: ESClientCreateError in case of error
     public convenience init(_ name: String? = nil) throws {
-        var client: OpaquePointer!
+        var client: OpaquePointer?
         weak var weakSelf: ESClient?
         let status = es_new_client(&client) { innerClient, rawMessage in
             if let self = weakSelf {
@@ -56,11 +56,11 @@ public final class ESClient: ESClientProtocol {
             }
         }
         
-        try self.init(name: name, client: client, native: client, status: status)
+        try self.init(name: name, client: client, status: status)
         weakSelf = self
     }
     
-    private init(name: String?, client: ESNativeClient?, native: OpaquePointer, status: es_new_client_result_t) throws {
+    private init(name: String?, client: ESNativeClient?, status: es_new_client_result_t) throws {
         let name = name ?? "ESClient"
         guard let client, status == ES_NEW_CLIENT_RESULT_SUCCESS else {
             throw ESError("es_new_client", result: status, client: name)
@@ -70,7 +70,6 @@ public final class ESClient: ESClientProtocol {
         
         self.name = name
         self.client = client
-        self.unsafeNativeClient = native
         self.pathMutes = ESMutePath(client: client)
         self.processMutes = ESMuteProcess(client: client)
         
@@ -103,7 +102,7 @@ public final class ESClient: ESClientProtocol {
     /// Reference to `es_client_t` used under the hood.
     /// DO NOT use it for modifyng any mutes/inversions/etc, the behaviour is undefined.
     /// You may want to use it for informational purposes (list of mutes, etc).
-    public var unsafeNativeClient: OpaquePointer
+    public var unsafeNativeClient: OpaquePointer { client.native }
     
     // MARK: Messages
     
@@ -441,7 +440,7 @@ extension ESClient {
             }
         }
         
-        let client = try ESClient(name: nil, client: native, native: OpaquePointer(bitPattern: 0xdeadbeef)!, status: status)
+        let client = try ESClient(name: nil, client: native, status: status)
         weakSelf = client
         
         return client

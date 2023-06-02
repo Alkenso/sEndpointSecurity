@@ -23,6 +23,8 @@
 import EndpointSecurity
 
 public protocol ESNativeClient {
+    var native: OpaquePointer { get }
+    
     func esRespond(_ message: UnsafePointer<es_message_t>, flags: UInt32, cache: Bool) -> es_respond_result_t
     
     func esSubscribe(_ events: [es_event_type_t]) -> es_return_t
@@ -74,6 +76,8 @@ public protocol ESNativeClient {
 }
 
 extension OpaquePointer: ESNativeClient {
+    public var native: OpaquePointer { self }
+    
     public func esRespond(_ message: UnsafePointer<es_message_t>, flags: UInt32, cache: Bool) -> es_respond_result_t {
         switch message.pointee.event_type {
         // flags requests
