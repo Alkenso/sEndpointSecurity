@@ -74,9 +74,9 @@ public struct ESSubscription {
 }
 
 public final class ESSubscriptionControl {
-    let sharedState = SubscriptionState()
+    internal let sharedState = SubscriptionState()
     
-    init() {
+    internal init() {
         sharedState.control = self
     }
     

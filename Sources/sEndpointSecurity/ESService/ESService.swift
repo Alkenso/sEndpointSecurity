@@ -100,7 +100,7 @@ public final class ESService: ESServiceRegistering {
     ///
     /// - Warning: Perfonamce-sensitive handler, called **synchronously** once for each process path.
     /// Do here as minimum work as possible.
-    public var pathInterestHandler: (ESProcess) -> (ESInterest) = { _ in .listen() }
+    public var pathInterestHandler: (ESProcess) -> ESInterest = { _ in .listen() }
     
     /// Registers the subscription. MUST be called before `activate`.
     /// At the moment registration is one-way operation.
@@ -163,6 +163,7 @@ public final class ESService: ESServiceRegistering {
         client.pathInterestHandler = { [store, pathInterestHandler] in
             .combine(.restrictive, [store.pathInterest(in: $0), pathInterestHandler($0)]) ?? .listen()
         }
+        client.queue = nil
         
         self.client = client
         
