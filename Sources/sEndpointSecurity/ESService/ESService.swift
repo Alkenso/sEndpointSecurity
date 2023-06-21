@@ -100,6 +100,7 @@ public final class ESService: ESServiceRegistering {
     ///
     /// - Warning: Perfonamce-sensitive handler, called **synchronously** once for each process path.
     /// Do here as minimum work as possible.
+    /// - Warning: The property MUST NOT be changed while the service is activated.
     public var pathInterestHandler: (ESProcess) -> ESInterest = { _ in .listen() }
     
     /// Registers the subscription. MUST be called before `activate`.
@@ -150,6 +151,7 @@ public final class ESService: ESServiceRegistering {
     /// The handler is called in activation process: after ESClient is created but before any subscription is made.
     /// Good point to add service-wide mutes.
     /// - Warning: Do NOT call `activate` or `invalidate` routines from the handler.
+    /// - Warning: The property MUST NOT be changed while the service is activated.
     public var preSubscriptionHandler: (() throws -> Void)?
     
     /// Activates the service. On success all subscriptions would start receiving ES events if subscibed.
@@ -197,6 +199,7 @@ public final class ESService: ESServiceRegistering {
     }
     
     /// Config used to convert native `es_message_t` into `ESMessage`.
+    /// - Warning: The property MUST NOT be changed while the service is activated.  
     public var converterConfig: ESConverter.Config {
         get { store.converterConfig }
         set { store.converterConfig = newValue }
