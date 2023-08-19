@@ -112,7 +112,7 @@ public final class ESSubscriptionControl {
 internal final class SubscriptionState {
     fileprivate var subscribed: Int64 = 0
     fileprivate weak var control: ESSubscriptionControl?
-    fileprivate var lock = os_unfair_lock()
+    fileprivate var lock = UnfairLock()
     
     var isSubscribed: Bool { OSAtomicAdd64(0, &subscribed) == 1 }
     var isAlive: Bool { control != nil }

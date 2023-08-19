@@ -163,7 +163,7 @@ internal final class ESServiceSubscriptionStore {
 }
 
 internal final class ESMultipleResolution {
-    private var lock = os_unfair_lock()
+    private var lock = UnfairLock()
     private var fulfilled = 0
     private var resolutions: [ESAuthResolution]
     private let reply: (ESAuthResolution) -> Void

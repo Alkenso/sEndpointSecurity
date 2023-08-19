@@ -76,7 +76,7 @@ internal func validESEvents(_ client: ESNativeClient) -> Set<es_event_type_t> {
 }
 
 private var validESEventsCache: Set<es_event_type_t>?
-private var validESEventsCacheLock = os_unfair_lock()
+private var validESEventsCacheLock = UnfairLock()
 
 private let fallbackESEvents: Set<es_event_type_t> = {
     let lastEvent: UInt32

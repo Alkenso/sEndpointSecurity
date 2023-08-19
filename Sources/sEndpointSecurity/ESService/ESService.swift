@@ -50,7 +50,7 @@ public final class ESService: ESServiceRegistering {
     private let store = ESServiceSubscriptionStore()
     private var client: Client?
     private var isActivated = false
-    private var activationLock = os_unfair_lock()
+    private var activationLock = UnfairLock()
     
     public convenience init() {
         self.init(createES: ESClient.init)

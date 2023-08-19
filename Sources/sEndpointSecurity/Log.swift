@@ -23,20 +23,18 @@
 import Foundation
 import SwiftConvenience
 
-public enum sEndpointSecurityLogSubsystem: String, SCLogSubsystem {
-    case client = "ESClient"
-    case xpc = "ESXPC"
-    case service = "ESService"
-}
-
-extension sEndpointSecurityLogSubsystem: CustomStringConvertible {
-    public var description: String {
-        "sEndpointSecurity.\(rawValue)"
+public enum sEndpointSecurityLog {
+    public static let subsystem = "sEndpointSecurity"
+    
+    public enum Category: String {
+        case client = "ESClient"
+        case xpc = "ESXPC"
+        case service = "ESService"
     }
 }
 
 extension SCLog {
-    static func internalLog(_ subsystem: sEndpointSecurityLogSubsystem) -> SCLog {
-        SCLogger.default.withSubsystem(subsystem)
+    internal static func internalLog(_ category: sEndpointSecurityLog.Category) -> SCLog {
+        SCLogger.default.with(subsystem: sEndpointSecurityLog.subsystem, category: category.rawValue)
     }
 }
