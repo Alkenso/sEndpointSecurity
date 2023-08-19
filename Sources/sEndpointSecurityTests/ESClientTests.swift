@@ -7,6 +7,7 @@ import SwiftConvenienceTestUtils
 import XCTest
 
 class ESClientTests: XCTestCase {
+    static let emitQueue = DispatchQueue(label: "ESClientTest.es_native_queue")
     var native: MockNativeClient!
     var client: ESClient!
     var handler: es_handler_block_t!
@@ -61,7 +62,7 @@ class ESClientTests: XCTestCase {
             notifyMessageHandlerExp.fulfill()
         }
         
-        XCTAssertEqual(client.subscribe([ES_EVENT_TYPE_AUTH_SETTIME, ES_EVENT_TYPE_NOTIFY_SETTIME]), true)
+        XCTAssertNoThrow(try client.subscribe([ES_EVENT_TYPE_AUTH_SETTIME, ES_EVENT_TYPE_NOTIFY_SETTIME]))
         XCTAssertEqual(native.subscriptions, [ES_EVENT_TYPE_AUTH_SETTIME, ES_EVENT_TYPE_NOTIFY_SETTIME])
         
         emitMessage(path: "/path/to/test", signingID: "s1", teamID: "t1", event: ES_EVENT_TYPE_AUTH_SETTIME, isAuth: true)
@@ -72,7 +73,7 @@ class ESClientTests: XCTestCase {
     
     func test_mutes_ignores() {
         // Case 1.
-        XCTAssertTrue(client.mute(path: "test1", type: ES_MUTE_PATH_TYPE_LITERAL))
+        XCTAssertNoThrow(try client.mute(path: "test1", type: ES_MUTE_PATH_TYPE_LITERAL))
         
         let expCase1Test1NotCalled = expectation(description: "case 1: test1 process should be muted")
         expCase1Test1NotCalled.isInverted = true
@@ -94,7 +95,7 @@ class ESClientTests: XCTestCase {
         waitForExpectations()
         
         // Case 2.
-        XCTAssertTrue(client.mute(path: "test2", type: ES_MUTE_PATH_TYPE_LITERAL, events: [ES_EVENT_TYPE_NOTIFY_OPEN]))
+        XCTAssertNoThrow(try client.mute(path: "test2", type: ES_MUTE_PATH_TYPE_LITERAL, events: [ES_EVENT_TYPE_NOTIFY_OPEN]))
         
         let expCase2OpenNotCalled = expectation(description: "case 2: OPEN event is mutes")
         expCase2OpenNotCalled.isInverted = true
@@ -166,10 +167,10 @@ class ESClientTests: XCTestCase {
     
     @available(macOS 13.0, *)
     func test_inverted() {
-        XCTAssertTrue(client.invertMuting(ES_MUTE_INVERSION_TYPE_PATH))
+        XCTAssertNoThrow(try client.invertMuting(ES_MUTE_INVERSION_TYPE_PATH))
         
         /// Only events from `test...` shoud come.
-        XCTAssertTrue(client.mute(path: "test", type: ES_MUTE_PATH_TYPE_PREFIX))
+        XCTAssertNoThrow(try client.mute(path: "test", type: ES_MUTE_PATH_TYPE_PREFIX))
         
         let processMuteHandlerExp = expectation(description: "Process mute handler called once per process")
         processMuteHandlerExp.expectedFulfillmentCount = 2
@@ -218,54 +219,10 @@ class ESClientTests: XCTestCase {
     }
     
     private func emitMessage(path: String, signingID: String, teamID: String, event: es_event_type_t, isAuth: Bool) {
-        let message = Self.createMessage(path: path, signingID: signingID, teamID: teamID, event: event, isAuth: isAuth)
+        let message = createMessage(path: path, signingID: signingID, teamID: teamID, event: event, isAuth: isAuth)
         Self.emitQueue.async { [self] in
             handler(OpaquePointer(Unmanaged.passUnretained(native).toOpaque()), message.unsafeValue)
             Self.emitQueue.asyncAfter(deadline: .now() + 1, execute: message.cleanup)
         }
-    }
-    
-    private static func createMessage(path: String, signingID: String, teamID: String, event: es_event_type_t, isAuth: Bool) -> Resource<UnsafePointer<es_message_t>> {
-        let message = UnsafeMutablePointer<es_message_t>.allocate(capacity: 1)
-        message.pointee.version = 4
-        message.pointee.global_seq_num = nextMessageID
-        nextMessageID += 1
-        
-        message.pointee.process = .allocate(capacity: 1)
-        message.pointee.process.pointee = .init(
-            audit_token: .random(), ppid: 10, original_ppid: 10, group_id: 20, session_id: 500,
-            codesigning_flags: 0x800, is_platform_binary: false, is_es_client: false,
-            cdhash: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-            signing_id: .init(string: signingID),
-            team_id: .init(string: teamID),
-            executable: .allocate(capacity: 1),
-            tty: nil,
-            start_time: .init(tv_sec: 100, tv_usec: 500),
-            responsible_audit_token: .random(),
-            parent_audit_token: .random()
-        )
-        message.pointee.process.pointee.executable.pointee.path = .init(string: path)
-        
-        message.pointee.action_type = isAuth ? ES_ACTION_TYPE_AUTH : ES_ACTION_TYPE_NOTIFY
-        message.pointee.event_type = event
-        
-        return .raii(message) { _ in
-            message.pointee.process.pointee.team_id.data?.deallocate()
-            message.pointee.process.pointee.signing_id.data?.deallocate()
-            message.pointee.process.pointee.executable.pointee.path.data?.deallocate()
-            message.pointee.process.pointee.executable.deallocate()
-            message.pointee.process.deallocate()
-            message.deallocate()
-        }
-    }
-    
-    private static var nextMessageID: UInt64 = 1
-    private static let emitQueue = DispatchQueue(label: "ESClientTest.es_native_queue")
-}
-
-private extension es_string_token_t {
-    init(string: String) {
-        let ptr = strdup(string)
-        self.init(length: UnsafePointer(ptr).flatMap(strlen) ?? 0, data: ptr)
     }
 }

@@ -1,10 +1,3 @@
-//
-//  File.swift
-//  
-//
-//  Created by Alkenso (Vladimir Vashurkin) on 01.03.2023.
-//
-
 import EndpointSecurity
 import Foundation
 import sEndpointSecurity
@@ -21,6 +14,8 @@ class MockNativeClient: ESNativeClient {
     var prefixMutes: [String: Set<es_event_type_t>] = [:]
     var processMutes: [audit_token_t: Set<es_event_type_t>] = [:]
     var responses: [UInt64: ESAuthResolution] = [:]
+    
+    var native: OpaquePointer { OpaquePointer(bitPattern: 0xdeadbeef)! }
     
     func esRespond(_ message: UnsafePointer<es_message_t>, flags: UInt32, cache: Bool) -> es_respond_result_t {
         responses[message.pointee.global_seq_num] = ESAuthResolution(result: .flags(flags), cache: cache)
@@ -132,7 +127,7 @@ class MockNativeClient: ESNativeClient {
         return ES_RETURN_SUCCESS
     }
     
-    func esMutedProcesses() -> [audit_token_t : [es_event_type_t]] {
+    func esMutedProcesses() -> [audit_token_t: [es_event_type_t]] {
         processMutes.mapValues { Array($0) }
     }
 }

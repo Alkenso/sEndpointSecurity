@@ -24,9 +24,9 @@ import Foundation
 
 extension Optional where Wrapped == DispatchQueue {
     @inline(__always)
-    internal func async(execute work: @escaping () -> Void) {
+    internal func async(flags: DispatchWorkItemFlags = [], execute work: @escaping () -> Void) {
         if let self {
-            self.async(execute: work)
+            self.async(flags: flags, execute: work)
         } else {
             work()
         }

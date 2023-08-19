@@ -29,7 +29,7 @@ private let log = SCLogger.internalLog(.xpc)
 internal final class ESXPCConnection {
     typealias ConnectResult = Result<es_new_client_result_t, Error>
     var connectionStateHandler: ((ConnectResult) -> Void)?
-    
+    var reconnectDelay: TimeInterval = 3.0
     var converterConfig: ESConverter.Config = .default
     
     init(delegate: ESClientXPCDelegateProtocol, createConnection: @escaping () -> NSXPCConnection) {
@@ -99,6 +99,7 @@ internal final class ESXPCConnection {
     private let createConnection: () -> NSXPCConnection
     @Atomic private var xpcConnection: NSXPCConnection
     @Atomic private var reconnectOnFailure = true
+    private let queue = DispatchQueue(label: "ESXPCConnection.connectionQueue")
     
     private func reconnect() {
         guard reconnectOnFailure else { return }
@@ -112,7 +113,7 @@ internal final class ESXPCConnection {
         defer {
             let notifyResult = result.map(\.result)
             notify?(notifyResult)
-            connectionStateHandler?(notifyResult)
+            queue.async { self.connectionStateHandler?(notifyResult) }
         }
         
         guard let value = result.success, value.result == ES_NEW_CLIENT_RESULT_SUCCESS else {
@@ -128,8 +129,10 @@ internal final class ESXPCConnection {
             log.warning("ESXPC connection invalidated")
             
             connection?.invalidationHandler = nil
-            self?.connectionStateHandler?(.failure(CocoaError(.xpcConnectionInterrupted)))
-            self?.scheduleReconnect()
+            
+            guard let self else { return }
+            self.queue.async { self.connectionStateHandler?(.failure(CocoaError(.xpcConnectionInterrupted))) }
+            self.scheduleReconnect()
         }
         value.connection.interruptionHandler = { [weak connection = value.connection] in
             log.warning("ESXPC connection interrupted. Invalidating...")
@@ -142,7 +145,6 @@ internal final class ESXPCConnection {
     }
 
     private func scheduleReconnect() {
-        let reconnectDelay: TimeInterval = 3.0
         DispatchQueue.global().asyncAfter(deadline: .now() + reconnectDelay, execute: reconnect)
     }
 }
