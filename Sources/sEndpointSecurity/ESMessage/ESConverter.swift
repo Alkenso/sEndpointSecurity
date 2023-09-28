@@ -162,6 +162,49 @@ public extension ESConverter {
         )
     }
     
+    func esProfile(_ es: es_profile_t) -> ESProfile {
+        .init(
+            identifier: esString(es.identifier),
+            uuid: esString(es.uuid),
+            installSource: es.install_source,
+            organization: esString(es.organization),
+            displayName: esString(es.display_name),
+            scope: esString(es.scope)
+        )
+    }
+    
+    func esODMemberID(_ es: UnsafePointer<es_od_member_id_t>) throws -> ESODMemberID {
+        switch es.pointee.member_type {
+        case ES_OD_MEMBER_TYPE_USER_NAME:
+            return .userName(esString(es.pointee.member_value.name))
+        case ES_OD_MEMBER_TYPE_USER_UUID:
+            return .userUUID(UUID(uuid: es.pointee.member_value.uuid))
+        case ES_OD_MEMBER_TYPE_GROUP_UUID:
+            return .groupUUID(UUID(uuid: es.pointee.member_value.uuid))
+        default:
+            throw CommonError.invalidArgument(arg: "es_od_member_id_t", invalidValue: es.pointee.member_type)
+        }
+    }
+    
+    func esODMemberIDs(_ es: UnsafePointer<es_od_member_id_array_t>) throws -> [ESODMemberID] {
+        switch es.pointee.member_type {
+        case ES_OD_MEMBER_TYPE_USER_NAME:
+            return UnsafeBufferPointer(start: es.pointee.member_array.names, count: es.pointee.member_count).map {
+                .userName(esString($0))
+            }
+        case ES_OD_MEMBER_TYPE_USER_UUID:
+            return UnsafeBufferPointer(start: es.pointee.member_array.uuids, count: es.pointee.member_count).map {
+                .userUUID(UUID(uuid: $0))
+            }
+        case ES_OD_MEMBER_TYPE_GROUP_UUID:
+            return UnsafeBufferPointer(start: es.pointee.member_array.uuids, count: es.pointee.member_count).map {
+                .groupUUID(UUID(uuid: $0))
+            }
+        default:
+            throw CommonError.invalidArgument(arg: "es_od_member_id_t", invalidValue: es.pointee.member_type)
+        }
+    }
+    
     func esEvent(_ type: es_event_type_t, _ event: es_events_t) throws -> ESEvent {
         switch type {
         case ES_EVENT_TYPE_AUTH_EXEC:
@@ -415,6 +458,47 @@ public extension ESConverter {
             return .btmLaunchItemAdd(esEvent(btmLaunchItemAdd: event.btm_launch_item_add))
         case ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_REMOVE:
             return .btmLaunchItemRemove(esEvent(btmLaunchItemRemove: event.btm_launch_item_remove))
+        // macOS 14.0:
+        case ES_EVENT_TYPE_NOTIFY_PROFILE_ADD:
+            return .profileAdd(esEvent(profileAdd: event.profile_add.pointee))
+        case ES_EVENT_TYPE_NOTIFY_PROFILE_REMOVE:
+            return .profileRemove(esEvent(profileRemove: event.profile_remove.pointee))
+        case ES_EVENT_TYPE_NOTIFY_SU:
+            return .su(esEvent(su: event.su.pointee))
+        case ES_EVENT_TYPE_NOTIFY_AUTHORIZATION_PETITION:
+            return .authorizationPetition(esEvent(authorizationPetition: event.authorization_petition.pointee))
+        case ES_EVENT_TYPE_NOTIFY_AUTHORIZATION_JUDGEMENT:
+            return .authorizationJudgement(esEvent(authorizationJudgement: event.authorization_judgement.pointee))
+        case ES_EVENT_TYPE_NOTIFY_SUDO:
+            return .sudo(esEvent(sudo: event.sudo.pointee))
+        case ES_EVENT_TYPE_NOTIFY_OD_GROUP_ADD:
+            return try .odGroupAdd(esEvent(odGroupAdd: event.od_group_add.pointee))
+        case ES_EVENT_TYPE_NOTIFY_OD_GROUP_REMOVE:
+            return try .odGroupRemove(esEvent(odGroupRemove: event.od_group_remove.pointee))
+        case ES_EVENT_TYPE_NOTIFY_OD_GROUP_SET:
+            return try .odGroupSet(esEvent(odGroupSet: event.od_group_set.pointee))
+        case ES_EVENT_TYPE_NOTIFY_OD_MODIFY_PASSWORD:
+            return .odModifyPassword(esEvent(odModifyPassword: event.od_modify_password.pointee))
+        case ES_EVENT_TYPE_NOTIFY_OD_DISABLE_USER:
+            return .odDisableUser(esEvent(odDisableUser: event.od_disable_user.pointee))
+        case ES_EVENT_TYPE_NOTIFY_OD_ENABLE_USER:
+            return .odEnableUser(esEvent(odEnableUser: event.od_enable_user.pointee))
+        case ES_EVENT_TYPE_NOTIFY_OD_ATTRIBUTE_VALUE_ADD:
+            return .odAttributeValueAdd(esEvent(odAttributeValueAdd: event.od_attribute_value_add.pointee))
+        case ES_EVENT_TYPE_NOTIFY_OD_ATTRIBUTE_VALUE_REMOVE:
+            return .odAttributeValueRemove(esEvent(odAttributeValueRemove: event.od_attribute_value_remove.pointee))
+        case ES_EVENT_TYPE_NOTIFY_OD_ATTRIBUTE_SET:
+            return .odAttributeSet(esEvent(odAttributeSet: event.od_attribute_set.pointee))
+        case ES_EVENT_TYPE_NOTIFY_OD_CREATE_USER:
+            return .odCreateUser(esEvent(odCreateUser: event.od_create_user.pointee))
+        case ES_EVENT_TYPE_NOTIFY_OD_CREATE_GROUP:
+            return .odCreateGroup(esEvent(odCreateGroup: event.od_create_group.pointee))
+        case ES_EVENT_TYPE_NOTIFY_OD_DELETE_USER:
+            return .odDeleteUser(esEvent(odDeleteUser: event.od_delete_user.pointee))
+        case ES_EVENT_TYPE_NOTIFY_OD_DELETE_GROUP:
+            return .odDeleteGroup(esEvent(odDeleteGroup: event.od_delete_group.pointee))
+        case ES_EVENT_TYPE_NOTIFY_XPC_CONNECT:
+            return .xpcConnect(esEvent(xpcConnect: event.xpc_connect.pointee))
         default:
             throw CommonError.invalidArgument(arg: "es_event_type_t", invalidValue: type)
         }
@@ -884,5 +968,226 @@ public extension ESConverter {
             app: es.pointee.instigator.flatMap(esProcess),
             item: esBTMLaunchItem(es.pointee.item)
         )
+    }
+    
+    func esEvent(profileAdd es: es_event_profile_add_t) -> ESEvent.ProfileAdd {
+        .init(
+            instigator: esProcess(es.instigator),
+            isUpdate: es.is_update,
+            profile: esProfile(es.profile.pointee)
+        )
+    }
+    
+    func esEvent(profileRemove es: es_event_profile_remove_t) -> ESEvent.ProfileRemove {
+        .init(
+            instigator: esProcess(es.instigator),
+            profile: esProfile(es.profile.pointee)
+        )
+    }
+    
+    func esEvent(su es: es_event_su_t) -> ESEvent.SU {
+        .init(
+            success: es.success,
+            failureMessage: esString(es.failure_message),
+            fromUID: es.from_uid,
+            fromUsername: esString(es.from_username),
+            toUID: es.has_to_uid ? es.to_uid.uid : nil,
+            toUsername: esString(es.to_username),
+            shell: esString(es.shell),
+            args: UnsafeBufferPointer(start: es.argv, count: es.argc).map(esString),
+            env: UnsafeBufferPointer(start: es.env, count: es.env_count).map(esString)
+        )
+    }
+    
+    func esEvent(authorizationPetition es: es_event_authorization_petition_t) -> ESEvent.AuthorizationPetition {
+        .init(
+            instigator: esProcess(es.instigator),
+            petitioner: es.petitioner.flatMap(esProcess),
+            flags: es.flags,
+            rights: UnsafeBufferPointer(start: es.rights, count: es.right_count).map(esString)
+        )
+    }
+    
+    func esEvent(authorizationJudgement es: es_event_authorization_judgement_t) -> ESEvent.AuthorizationJudgement {
+        .init(
+            instigator: esProcess(es.instigator),
+            petitioner: es.petitioner.flatMap(esProcess),
+            returnCode: es.return_code,
+            results: UnsafeBufferPointer(start: es.results, count: es.result_count).map {
+                .init(
+                    rightName: esString($0.right_name),
+                    ruleClass: $0.rule_class,
+                    granted: $0.granted
+                )
+            }
+        )
+    }
+    
+    func esEvent(sudo es: es_event_sudo_t) -> ESEvent.SUDO {
+        .init(
+            success: es.success,
+            rejectInfo: es.reject_info.flatMap {
+                .init(
+                    pluginName: esString($0.pointee.plugin_name),
+                    pluginType: $0.pointee.plugin_type,
+                    failureMessage: esString($0.pointee.failure_message)
+                )
+            },
+            fromUID: es.has_from_uid ? es.from_uid.uid : nil,
+            fromUsername: esString(es.from_username),
+            toUID: es.has_to_uid ? es.to_uid.uid : nil,
+            toUsername: esString(es.to_username),
+            command: esString(es.command)
+        )
+    }
+    
+    func esEvent(odGroupAdd es: es_event_od_group_add_t) throws -> ESEvent.ODGroupAdd {
+        .init(
+            instigator: esProcess(es.instigator),
+            errorCode: es.error_code,
+            groupName: esString(es.group_name),
+            member: try esODMemberID(es.member),
+            nodeName: esString(es.node_name),
+            dbPath: esString(es.db_path)
+        )
+    }
+    
+    func esEvent(odGroupRemove es: es_event_od_group_remove_t) throws -> ESEvent.ODGroupRemove {
+        .init(
+            instigator: esProcess(es.instigator),
+            errorCode: es.error_code,
+            groupName: esString(es.group_name),
+            member: try esODMemberID(es.member),
+            nodeName: esString(es.node_name),
+            dbPath: esString(es.db_path)
+        )
+    }
+    
+    func esEvent(odGroupSet es: es_event_od_group_set_t) throws -> ESEvent.ODGroupSet {
+        .init(
+            instigator: esProcess(es.instigator),
+            errorCode: es.error_code,
+            groupName: esString(es.group_name),
+            members: try esODMemberIDs(es.members),
+            nodeName: esString(es.node_name),
+            dbPath: esString(es.db_path)
+        )
+    }
+    
+    func esEvent(odModifyPassword es: es_event_od_modify_password_t) -> ESEvent.ODModifyPassword {
+        .init(
+            instigator: esProcess(es.instigator),
+            errorCode: es.error_code,
+            accountType: es.account_type,
+            accountName: esString(es.account_name),
+            nodeName: esString(es.node_name),
+            dbPath: esString(es.db_path)
+        )
+    }
+    
+    func esEvent(odDisableUser es: es_event_od_disable_user_t) -> ESEvent.ODDisableUser {
+        .init(
+            instigator: esProcess(es.instigator),
+            errorCode: es.error_code,
+            userName: esString(es.user_name),
+            nodeName: esString(es.node_name),
+            dbPath: esString(es.db_path)
+        )
+    }
+    
+    func esEvent(odEnableUser es: es_event_od_enable_user_t) -> ESEvent.ODEnableUser {
+        .init(
+            instigator: esProcess(es.instigator),
+            errorCode: es.error_code,
+            userName: esString(es.user_name),
+            nodeName: esString(es.node_name),
+            dbPath: esString(es.db_path)
+        )
+    }
+    
+    func esEvent(odAttributeValueAdd es: es_event_od_attribute_value_add_t) -> ESEvent.ODAttributeValueAdd {
+        .init(
+            instigator: esProcess(es.instigator),
+            errorCode: es.error_code,
+            recordType: es.record_type,
+            recordName: esString(es.record_name),
+            attributeName: esString(es.attribute_name),
+            attributeValue: esString(es.attribute_value),
+            nodeName: esString(es.node_name),
+            dbPath: esString(es.db_path)
+        )
+    }
+    
+    func esEvent(odAttributeValueRemove es: es_event_od_attribute_value_remove_t) -> ESEvent.ODAttributeValueRemove {
+        .init(
+            instigator: esProcess(es.instigator),
+            errorCode: es.error_code,
+            recordType: es.record_type,
+            recordName: esString(es.record_name),
+            attributeName: esString(es.attribute_name),
+            attributeValue: esString(es.attribute_value),
+            nodeName: esString(es.node_name),
+            dbPath: esString(es.db_path)
+        )
+    }
+    
+    func esEvent(odAttributeSet es: es_event_od_attribute_set_t) -> ESEvent.ODAttributeSet {
+        .init(
+            instigator: esProcess(es.instigator),
+            errorCode: es.error_code,
+            recordType: es.record_type,
+            recordName: esString(es.record_name),
+            attributeName: esString(es.attribute_name),
+            attributeValues: UnsafeBufferPointer(
+                start: es.attribute_values,
+                count: es.attribute_value_count
+            ).map(esString),
+            nodeName: esString(es.node_name),
+            dbPath: esString(es.db_path)
+        )
+    }
+    
+    func esEvent(odCreateUser es: es_event_od_create_user_t) -> ESEvent.ODCreateUser {
+        .init(
+            instigator: esProcess(es.instigator),
+            errorCode: es.error_code,
+            userName: esString(es.user_name),
+            nodeName: esString(es.node_name),
+            dbPath: esString(es.db_path)
+        )
+    }
+    
+    func esEvent(odCreateGroup es: es_event_od_create_group_t) -> ESEvent.ODCreateGroup {
+        .init(
+            instigator: esProcess(es.instigator),
+            errorCode: es.error_code,
+            groupName: esString(es.group_name),
+            nodeName: esString(es.node_name),
+            dbPath: esString(es.db_path)
+        )
+    }
+    
+    func esEvent(odDeleteUser es: es_event_od_delete_user_t) -> ESEvent.ODDeleteUser {
+        .init(
+            instigator: esProcess(es.instigator),
+            errorCode: es.error_code,
+            userName: esString(es.user_name),
+            nodeName: esString(es.node_name),
+            dbPath: esString(es.db_path)
+        )
+    }
+    
+    func esEvent(odDeleteGroup es: es_event_od_delete_group_t) -> ESEvent.ODDeleteGroup {
+        .init(
+            instigator: esProcess(es.instigator),
+            errorCode: es.error_code,
+            groupName: esString(es.group_name),
+            nodeName: esString(es.node_name),
+            dbPath: esString(es.db_path)
+        )
+    }
+    
+    func esEvent(xpcConnect es: es_event_xpc_connect_t) -> ESEvent.XPCConnect {
+        .init(serviceName: esString(es.service_name), serviceDomainType: es.service_domain_type)
     }
 }

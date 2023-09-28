@@ -80,18 +80,16 @@ private var validESEventsCacheLock = UnfairLock()
 
 private let fallbackESEvents: Set<es_event_type_t> = {
     let lastEvent: UInt32
-    if #available(macOS 12.0, *) {
+    if #available(macOS 14.0, *) {
         lastEvent = ES_EVENT_TYPE_LAST.rawValue
+    } else if #available(macOS 13.0, *) {
+        lastEvent = ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_REMOVE.rawValue
+    } else if #available(macOS 12.0, *) {
+        lastEvent = ES_EVENT_TYPE_NOTIFY_COPYFILE.rawValue
     } else if #available(macOS 11.3, *) {
         lastEvent = ES_EVENT_TYPE_NOTIFY_GET_TASK_INSPECT.rawValue + 1
-    } else if #available(macOS 11.0, *) {
-        lastEvent = ES_EVENT_TYPE_NOTIFY_REMOUNT.rawValue + 1
-    } else if #available(macOS 10.15.4, *) {
-        lastEvent = ES_EVENT_TYPE_AUTH_GET_TASK.rawValue + 1
-    } else if #available(macOS 10.15.1, *) {
-        lastEvent = ES_EVENT_TYPE_NOTIFY_SETACL.rawValue + 1
     } else {
-        lastEvent = ES_EVENT_TYPE_AUTH_SETOWNER.rawValue + 1
+        lastEvent = ES_EVENT_TYPE_NOTIFY_REMOUNT.rawValue + 1
     }
     return Set((0..<lastEvent).map(es_event_type_t.init(rawValue:)))
 }()

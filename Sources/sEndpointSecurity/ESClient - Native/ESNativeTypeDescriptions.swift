@@ -288,6 +288,46 @@ extension es_event_type_t: ESNativeType {
             return "ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_ADD"
         case ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_REMOVE:
             return "ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_REMOVE"
+        case ES_EVENT_TYPE_NOTIFY_PROFILE_ADD:
+            return "ES_EVENT_TYPE_NOTIFY_PROFILE_ADD"
+        case ES_EVENT_TYPE_NOTIFY_PROFILE_REMOVE:
+            return "ES_EVENT_TYPE_NOTIFY_PROFILE_REMOVE"
+        case ES_EVENT_TYPE_NOTIFY_SU:
+            return "ES_EVENT_TYPE_NOTIFY_SU"
+        case ES_EVENT_TYPE_NOTIFY_AUTHORIZATION_PETITION:
+            return "ES_EVENT_TYPE_NOTIFY_AUTHORIZATION_PETITION"
+        case ES_EVENT_TYPE_NOTIFY_AUTHORIZATION_JUDGEMENT:
+            return "ES_EVENT_TYPE_NOTIFY_AUTHORIZATION_JUDGEMENT"
+        case ES_EVENT_TYPE_NOTIFY_SUDO:
+            return "ES_EVENT_TYPE_NOTIFY_SUDO"
+        case ES_EVENT_TYPE_NOTIFY_OD_GROUP_ADD:
+            return "ES_EVENT_TYPE_NOTIFY_OD_GROUP_ADD"
+        case ES_EVENT_TYPE_NOTIFY_OD_GROUP_REMOVE:
+            return "ES_EVENT_TYPE_NOTIFY_OD_GROUP_REMOVE"
+        case ES_EVENT_TYPE_NOTIFY_OD_GROUP_SET:
+            return "ES_EVENT_TYPE_NOTIFY_OD_GROUP_SET"
+        case ES_EVENT_TYPE_NOTIFY_OD_MODIFY_PASSWORD:
+            return "ES_EVENT_TYPE_NOTIFY_OD_MODIFY_PASSWORD"
+        case ES_EVENT_TYPE_NOTIFY_OD_DISABLE_USER:
+            return "ES_EVENT_TYPE_NOTIFY_OD_DISABLE_USER"
+        case ES_EVENT_TYPE_NOTIFY_OD_ENABLE_USER:
+            return "ES_EVENT_TYPE_NOTIFY_OD_ENABLE_USER"
+        case ES_EVENT_TYPE_NOTIFY_OD_ATTRIBUTE_VALUE_ADD:
+            return "ES_EVENT_TYPE_NOTIFY_OD_ATTRIBUTE_VALUE_ADD"
+        case ES_EVENT_TYPE_NOTIFY_OD_ATTRIBUTE_VALUE_REMOVE:
+            return "ES_EVENT_TYPE_NOTIFY_OD_ATTRIBUTE_VALUE_REMOVE"
+        case ES_EVENT_TYPE_NOTIFY_OD_ATTRIBUTE_SET:
+            return "ES_EVENT_TYPE_NOTIFY_OD_ATTRIBUTE_SET"
+        case ES_EVENT_TYPE_NOTIFY_OD_CREATE_USER:
+            return "ES_EVENT_TYPE_NOTIFY_OD_CREATE_USER"
+        case ES_EVENT_TYPE_NOTIFY_OD_CREATE_GROUP:
+            return "ES_EVENT_TYPE_NOTIFY_OD_CREATE_GROUP"
+        case ES_EVENT_TYPE_NOTIFY_OD_DELETE_USER:
+            return "ES_EVENT_TYPE_NOTIFY_OD_DELETE_USER"
+        case ES_EVENT_TYPE_NOTIFY_OD_DELETE_GROUP:
+            return "ES_EVENT_TYPE_NOTIFY_OD_DELETE_GROUP"
+        case ES_EVENT_TYPE_NOTIFY_XPC_CONNECT:
+            return "ES_EVENT_TYPE_NOTIFY_XPC_CONNECT"
         default:
             return nil
         }
@@ -596,6 +636,114 @@ extension es_address_type_t: ESNativeType {
             return "ES_ADDRESS_TYPE_IPV6"
         case ES_ADDRESS_TYPE_NAMED_SOCKET:
             return "ES_ADDRESS_TYPE_NAMED_SOCKET"
+        default:
+            return nil
+        }
+    }
+}
+
+extension es_profile_source_t: ESNativeType {
+    fileprivate var name: String? {
+        switch self {
+        case ES_PROFILE_SOURCE_MANAGED:
+            return "ES_PROFILE_SOURCE_MANAGED"
+        case ES_PROFILE_SOURCE_INSTALL:
+            return "ES_PROFILE_SOURCE_INSTALL"
+        default:
+            return nil
+        }
+    }
+}
+
+extension es_sudo_plugin_type_t: ESNativeType {
+    fileprivate var name: String? {
+        switch self {
+        case ES_SUDO_PLUGIN_TYPE_UNKNOWN:
+            return "ES_SUDO_PLUGIN_TYPE_UNKNOWN"
+        case ES_SUDO_PLUGIN_TYPE_FRONT_END:
+            return "ES_SUDO_PLUGIN_TYPE_FRONT_END"
+        case ES_SUDO_PLUGIN_TYPE_POLICY:
+            return "ES_SUDO_PLUGIN_TYPE_POLICY"
+        case ES_SUDO_PLUGIN_TYPE_IO:
+            return "ES_SUDO_PLUGIN_TYPE_IO"
+        case ES_SUDO_PLUGIN_TYPE_AUDIT:
+            return "ES_SUDO_PLUGIN_TYPE_AUDIT"
+        case ES_SUDO_PLUGIN_TYPE_APPROVAL:
+            return "ES_SUDO_PLUGIN_TYPE_APPROVAL"
+        default:
+            return nil
+        }
+    }
+}
+
+extension es_authorization_rule_class_t: ESNativeType {
+    fileprivate var name: String? {
+        switch self {
+        case ES_AUTHORIZATION_RULE_CLASS_USER:
+            return "ES_AUTHORIZATION_RULE_CLASS_USER"
+        case ES_AUTHORIZATION_RULE_CLASS_RULE:
+            return "ES_AUTHORIZATION_RULE_CLASS_RULE"
+        case ES_AUTHORIZATION_RULE_CLASS_MECHANISM:
+            return "ES_AUTHORIZATION_RULE_CLASS_MECHANISM"
+        case ES_AUTHORIZATION_RULE_CLASS_ALLOW:
+            return "ES_AUTHORIZATION_RULE_CLASS_ALLOW"
+        case ES_AUTHORIZATION_RULE_CLASS_DENY:
+            return "ES_AUTHORIZATION_RULE_CLASS_DENY"
+        case ES_AUTHORIZATION_RULE_CLASS_UNKNOWN:
+            return "ES_AUTHORIZATION_RULE_CLASS_UNKNOWN"
+        case ES_AUTHORIZATION_RULE_CLASS_INVALID:
+            return "ES_AUTHORIZATION_RULE_CLASS_INVALID"
+        default:
+            return nil
+        }
+    }
+}
+
+extension es_od_account_type_t: ESNativeType {
+    fileprivate var name: String? {
+        switch self {
+        case ES_OD_ACCOUNT_TYPE_USER:
+            return "ES_OD_ACCOUNT_TYPE_USER"
+        case ES_OD_ACCOUNT_TYPE_COMPUTER:
+            return "ES_OD_ACCOUNT_TYPE_COMPUTER"
+        default:
+            return nil
+        }
+    }
+}
+
+extension es_od_record_type_t: ESNativeType {
+    fileprivate var name: String? {
+        switch self {
+        case ES_OD_RECORD_TYPE_USER:
+            return "ES_OD_RECORD_TYPE_USER"
+        case ES_OD_RECORD_TYPE_GROUP:
+            return "ES_OD_RECORD_TYPE_GROUP"
+        default:
+            return nil
+        }
+    }
+}
+
+extension es_xpc_domain_type_t: ESNativeType {
+    fileprivate var name: String? {
+        switch self {
+        case ES_XPC_DOMAIN_TYPE_SYSTEM:
+            return "ES_XPC_DOMAIN_TYPE_SYSTEM"
+        case ES_XPC_DOMAIN_TYPE_USER:
+            return "ES_XPC_DOMAIN_TYPE_USER"
+        case ES_XPC_DOMAIN_TYPE_USER_LOGIN:
+            return "ES_XPC_DOMAIN_TYPE_USER_LOGIN"
+        case ES_XPC_DOMAIN_TYPE_SESSION:
+            return "ES_XPC_DOMAIN_TYPE_SESSION"
+        case ES_XPC_DOMAIN_TYPE_PID:
+            return "ES_XPC_DOMAIN_TYPE_PID"
+        case ES_XPC_DOMAIN_TYPE_MANAGER:
+            return "ES_XPC_DOMAIN_TYPE_MANAGER"
+        case ES_XPC_DOMAIN_TYPE_PORT:
+            return "ES_XPC_DOMAIN_TYPE_PORT"
+        case ES_XPC_DOMAIN_TYPE_GUI:
+            return "ES_XPC_DOMAIN_TYPE_GUI"
         default:
             return nil
         }

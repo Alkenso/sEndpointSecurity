@@ -6,13 +6,13 @@ import PackageDescription
 let package = Package(
     name: "sEndpointSecurity",
     platforms: [
-        .macOS(.v10_15),
+        .macOS(.v11),
     ],
     products: [
         .library(name: "sEndpointSecurity", targets: ["sEndpointSecurity"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/Alkenso/SwiftConvenience.git", exact: "0.1.1"),
+        .package(url: "https://github.com/Alkenso/SwiftConvenience.git", exact: "0.2.0"),
     ],
     targets: [
         .target(

@@ -36,12 +36,8 @@ public final class ESMessagePtr {
     
     /// Initializes with message from `es_client` handler, retaining it and releasing when deallocated.
     public init(message: UnsafePointer<es_message_t>) {
-        if #available(macOS 11.0, *) {
-            es_retain_message(message)
-            self.rawMessage = message
-        } else {
-            self.rawMessage = UnsafePointer(es_copy_message(message)!)
-        }
+        es_retain_message(message)
+        self.rawMessage = message
         self.shouldFree = true
     }
     
@@ -54,11 +50,7 @@ public final class ESMessagePtr {
     
     deinit {
         guard shouldFree else { return }
-        if #available(macOS 11.0, *) {
-            es_release_message(rawMessage)
-        } else {
-            es_free_message(UnsafeMutablePointer(mutating: rawMessage))
-        }
+        es_release_message(rawMessage)
     }
     
     /// Converts raw message into ESMessage.

@@ -158,16 +158,48 @@ public struct BTMLaunchItem: Equatable, Codable {
     }
 }
 
+public struct ESProfile: Equatable, Codable {
+    public var identifier: String
+    public var uuid: String
+    public var installSource: es_profile_source_t
+    public var organization: String
+    public var displayName: String
+    public var scope: String
+    
+    public init(identifier: String, uuid: String, installSource: es_profile_source_t, organization: String, displayName: String, scope: String) {
+        self.identifier = identifier
+        self.uuid = uuid
+        self.installSource = installSource
+        self.organization = organization
+        self.displayName = displayName
+        self.scope = scope
+    }
+}
+
+/// The identity of a group member.
+public enum ESODMemberID: Equatable, Codable {
+    /// Group member is a user, designated by name.
+    case userName(String)
+    
+    /// Group member is a user, designated by UUID
+    case userUUID(UUID)
+    
+    /// Group member is another group, designated by UUID.
+    case groupUUID(UUID)
+}
+
 public enum ESEvent: Equatable, Codable {
     case access(Access)
     case authentication(Authentication)
+    case authorizationJudgement(AuthorizationJudgement)
+    case authorizationPetition(AuthorizationPetition)
     case btmLaunchItemAdd(BTMLaunchItemAdd)
     case btmLaunchItemRemove(BTMLaunchItemRemove)
     case chdir(Chdir)
     case chroot(Chroot)
     case clone(Clone)
-    case copyfile(CopyFile)
     case close(Close)
+    case copyfile(CopyFile)
     case create(Create)
     case csInvalidated
     case deleteextattr(DeleteExtAttr)
@@ -175,15 +207,15 @@ public enum ESEvent: Equatable, Codable {
     case exchangedata(ExchangeData)
     case exec(Exec)
     case exit(Exit)
+    case fcntl(Fcntl)
     case fileProviderMaterialize(FileProviderMaterialize)
     case fileProviderUpdate(FileProviderUpdate)
-    case fcntl(Fcntl)
     case fork(Fork)
     case fsgetpath(FsGetPath)
     case getTask(GetTask)
-    case getTaskRead(GetTaskRead)
     case getTaskInspect(GetTaskInspect)
     case getTaskName(GetTaskName)
+    case getTaskRead(GetTaskRead)
     case getattrlist(GetAttrList)
     case getextattr(GetExtAttr)
     case iokitOpen(IOKitOpen)
@@ -194,18 +226,33 @@ public enum ESEvent: Equatable, Codable {
     case loginLogin(LoginLogin)
     case loginLogout(LoginLogout)
     case lookup(Lookup)
+    case lwSessionLock(LWSessionLock)
     case lwSessionLogin(LWSessionLogin)
     case lwSessionLogout(LWSessionLogout)
-    case lwSessionLock(LWSessionLock)
     case lwSessionUnlock(LWSessionUnlock)
     case mmap(MMap)
     case mount(Mount)
     case mprotect(MProtect)
+    case odAttributeSet(ODAttributeSet)
+    case odAttributeValueAdd(ODAttributeValueAdd)
+    case odAttributeValueRemove(ODAttributeValueRemove)
+    case odCreateGroup(ODCreateGroup)
+    case odCreateUser(ODCreateUser)
+    case odDeleteGroup(ODDeleteGroup)
+    case odDeleteUser(ODDeleteUser)
+    case odDisableUser(ODDisableUser)
+    case odEnableUser(ODEnableUser)
+    case odGroupAdd(ODGroupAdd)
+    case odGroupRemove(ODGroupRemove)
+    case odGroupSet(ODGroupSet)
+    case odModifyPassword(ODModifyPassword)
     case open(Open)
     case opensshLogin(OpensshLogin)
     case opensshLogout(OpensshLogout)
     case procCheck(ProcCheck)
     case procSuspendResume(ProcSuspendResume)
+    case profileAdd(ProfileAdd)
+    case profileRemove(ProfileRemove)
     case ptyClose(PtyClose)
     case ptyGrant(PtyGrant)
     case readdir(Readdir)
@@ -222,11 +269,13 @@ public enum ESEvent: Equatable, Codable {
     case setflags(SetFlags)
     case setmode(SetMode)
     case setowner(SetOwner)
-    case setuid(SetUID)
     case setreuid(SetREUID)
     case settime
+    case setuid(SetUID)
     case signal(Signal)
     case stat(Stat)
+    case su(SU)
+    case sudo(SUDO)
     case trace(Trace)
     case truncate(Truncate)
     case uipcBind(UipcBind)
@@ -237,6 +286,7 @@ public enum ESEvent: Equatable, Codable {
     case write(Write)
     case xpMalwareDetected(XPMalwareDetected)
     case xpMalwareRemediated(XPMalwareRemediated)
+    case xpcConnect(XPCConnect)
 }
 
 public extension ESEvent {
@@ -773,6 +823,28 @@ public extension ESEvent {
         }
     }
     
+    struct ProfileAdd: Equatable, Codable {
+        public var instigator: ESProcess
+        public var isUpdate: Bool
+        public var profile: ESProfile
+        
+        public init(instigator: ESProcess, isUpdate: Bool, profile: ESProfile) {
+            self.instigator = instigator
+            self.isUpdate = isUpdate
+            self.profile = profile
+        }
+    }
+    
+    struct ProfileRemove: Equatable, Codable {
+        public var instigator: ESProcess
+        public var profile: ESProfile
+        
+        public init(instigator: ESProcess, profile: ESProfile) {
+            self.instigator = instigator
+            self.profile = profile
+        }
+    }
+    
     struct PtyClose: Equatable, Codable {
         public var dev: dev_t
         
@@ -1109,6 +1181,594 @@ public extension ESEvent {
             self.resultDescription = resultDescription
             self.remediatedPath = remediatedPath
             self.remediatedProcessAuditToken = remediatedProcessAuditToken
+        }
+    }
+    
+    struct SU: Equatable, Codable {
+        public var success: Bool
+        public var failureMessage: String
+        public var fromUID: uid_t
+        public var fromUsername: String
+        public var toUID: uid_t?
+        public var toUsername: String
+        public var shell: String
+        public var args: [String]
+        public var env: [String]
+        
+        public init(success: Bool, failureMessage: String, fromUID: uid_t, fromUsername: String, toUID: uid_t? = nil, toUsername: String, shell: String, args: [String], env: [String]) {
+            self.success = success
+            self.failureMessage = failureMessage
+            self.fromUID = fromUID
+            self.fromUsername = fromUsername
+            self.toUID = toUID
+            self.toUsername = toUsername
+            self.shell = shell
+            self.args = args
+            self.env = env
+        }
+    }
+    
+    struct SUDO: Equatable, Codable {
+        public var success: Bool
+        public var rejectInfo: RejectInfo?
+        public var fromUID: uid_t?
+        public var fromUsername: String
+        public var toUID: uid_t?
+        public var toUsername: String
+        public var command: String
+        
+        public init(success: Bool, rejectInfo: RejectInfo? = nil, fromUID: uid_t? = nil, fromUsername: String, toUID: uid_t? = nil, toUsername: String, command: String) {
+            self.success = success
+            self.rejectInfo = rejectInfo
+            self.fromUID = fromUID
+            self.fromUsername = fromUsername
+            self.toUID = toUID
+            self.toUsername = toUsername
+            self.command = command
+        }
+        
+        public struct RejectInfo: Equatable, Codable {
+            public var pluginName: String
+            public var pluginType: es_sudo_plugin_type_t
+            public var failureMessage: String
+            
+            public init(pluginName: String, pluginType: es_sudo_plugin_type_t, failureMessage: String) {
+                self.pluginName = pluginName
+                self.pluginType = pluginType
+                self.failureMessage = failureMessage
+            }
+        }
+    }
+    
+    /// Notification that a process peititioned for certain authorization rights.
+    struct AuthorizationPetition: Equatable, Codable {
+        /// Process that submitted the petition (XPC caller).
+        public var instigator: ESProcess
+        
+        /// Process that created the petition.
+        public var petitioner: ESProcess?
+        
+        /// Flags associated with the petition. Defined Security framework "Authorization/Authorizatioh.h".
+        public var flags: UInt32
+        
+        /// Array of string tokens, each token is the name of a right being requested.
+        public var rights: [String]
+        
+        public init(instigator: ESProcess, petitioner: ESProcess? = nil, flags: UInt32, rights: [String]) {
+            self.instigator = instigator
+            self.petitioner = petitioner
+            self.flags = flags
+            self.rights = rights
+        }
+    }
+    
+    /// Notification that a process had it's right petition judged.
+    struct AuthorizationJudgement: Equatable, Codable {
+        /// Process that submitted the petition (XPC caller).
+        public var instigator: ESProcess
+        
+        /// Process that created the petition.
+        public var petitioner: ESProcess?
+        
+        /// The overall result of the petition. 0 indicates success.
+        /// Possible return codes are defined Security framework "Authorization/Authorizatioh.h".
+        public var returnCode: Int32
+        
+        /// Array of results. One for each right that was peititioned.
+        public var results: [AuthorizationResult]
+        
+        public init(instigator: ESProcess, petitioner: ESProcess? = nil, returnCode: Int32, results: [AuthorizationResult]) {
+            self.instigator = instigator
+            self.petitioner = petitioner
+            self.returnCode = returnCode
+            self.results = results
+        }
+        
+        /// Describes, for a single right, the class of that right and if it was granted.
+        public struct AuthorizationResult: Equatable, Codable {
+            /// The name of the right being considered.
+            public var rightName: String
+            
+            /// The class of the right being considered.
+            /// The rule class determines how the operating system determines
+            /// if it should be granted or not.
+            public var ruleClass: es_authorization_rule_class_t
+            
+            /// Indicates if the right was granted or not.
+            public var granted: Bool
+            
+            public init(rightName: String, ruleClass: es_authorization_rule_class_t, granted: Bool) {
+                self.rightName = rightName
+                self.ruleClass = ruleClass
+                self.granted = granted
+            }
+        }
+    }
+    
+    /// Notification that a member was added to a group.
+    ///
+    /// - Note: This event does not indicate that a member was actually added.
+    /// For example when adding a user to a group they are already a member of.
+    struct ODGroupAdd: Equatable, Codable {
+        /// Process that instigated operation (XPC caller).
+        public var instigator: ESProcess
+        
+        /// 0 indicates the operation succeeded.
+        /// Values inidicating specific failure reasons are defined in odconstants.h.
+        public var errorCode: Int32
+        
+        /// The group to which the member was added.
+        public var groupName: String
+        
+        /// The identity of the member added.
+        public var member: ESODMemberID
+        
+        /// OD node being mutated.
+        /// Typically one of "/Local/Default", "/LDAPv3/<server>" or "/Active Directory/<domain>".
+        public var nodeName: String
+        
+        /// Optional.  If node_name is "/Local/Default", this is the path of the database
+        /// against which OD is authenticating.
+        public var dbPath: String
+        
+        public init(instigator: ESProcess, errorCode: Int32, groupName: String, member: ESODMemberID, nodeName: String, dbPath: String) {
+            self.instigator = instigator
+            self.errorCode = errorCode
+            self.groupName = groupName
+            self.member = member
+            self.nodeName = nodeName
+            self.dbPath = dbPath
+        }
+    }
+    
+    /// Notification that a member was removed from a group.
+    ///
+    /// - Note: This event does not indicate that a member was actually removed.
+    /// For example when removing a user from a group they are not a member of.
+    struct ODGroupRemove: Equatable, Codable {
+        /// Process that instigated operation (XPC caller).
+        public var instigator: ESProcess
+        
+        /// 0 indicates the operation succeeded.
+        /// Values inidicating specific failure reasons are defined in odconstants.h.
+        public var errorCode: Int32
+        
+        /// The group from which the member was removed.
+        public var groupName: String
+        
+        /// The identity of the member removed.
+        public var member: ESODMemberID
+        
+        /// OD node being mutated.
+        /// Typically one of "/Local/Default", "/LDAPv3/<server>" or "/Active Directory/<domain>".
+        public var nodeName: String
+        
+        /// Optional.  If node_name is "/Local/Default", this is the path of the database
+        /// against which OD is authenticating.
+        public var dbPath: String
+        
+        public init(instigator: ESProcess, errorCode: Int32, groupName: String, member: ESODMemberID, nodeName: String, dbPath: String) {
+            self.instigator = instigator
+            self.errorCode = errorCode
+            self.groupName = groupName
+            self.member = member
+            self.nodeName = nodeName
+            self.dbPath = dbPath
+        }
+    }
+    
+    /// Notification that a group had it's members initialised or replaced.
+    ///
+    /// - Note: This event does not indicate that a member was actually removed.
+    /// For example when removing a user from a group they are not a member of.
+    struct ODGroupSet: Equatable, Codable {
+        /// Process that instigated operation (XPC caller).
+        public var instigator: ESProcess
+        
+        /// 0 indicates the operation succeeded.
+        /// Values inidicating specific failure reasons are defined in odconstants.h.
+        public var errorCode: Int32
+        
+        /// The group for which members were set.
+        public var groupName: String
+        
+        public var members: [ESODMemberID]
+        
+        /// OD node being mutated.
+        /// Typically one of "/Local/Default", "/LDAPv3/<server>" or "/Active Directory/<domain>".
+        public var nodeName: String
+        
+        /// Optional.  If node_name is "/Local/Default", this is the path of the database
+        /// against which OD is authenticating.
+        public var dbPath: String
+        
+        public init(instigator: ESProcess, errorCode: Int32, groupName: String, members: [ESODMemberID], nodeName: String, dbPath: String) {
+            self.instigator = instigator
+            self.errorCode = errorCode
+            self.groupName = groupName
+            self.members = members
+            self.nodeName = nodeName
+            self.dbPath = dbPath
+        }
+    }
+    
+    /// Notification that an account had its password modified.
+    struct ODModifyPassword: Equatable, Codable {
+        /// Process that instigated operation (XPC caller).
+        public var instigator: ESProcess
+        
+        /// 0 indicates the operation succeeded.
+        /// Values inidicating specific failure reasons are defined in odconstants.h.
+        public var errorCode: Int32
+        
+        /// The type of the account for which the password was modified.
+        public var accountType: es_od_account_type_t
+        
+        /// The name of the account for which the password was modified.
+        public var accountName: String
+        
+        /// OD node being mutated.
+        /// Typically one of "/Local/Default", "/LDAPv3/<server>" or "/Active Directory/<domain>".
+        public var nodeName: String
+        
+        /// Optional.  If node_name is "/Local/Default", this is the path of the database
+        /// against which OD is authenticating.
+        public var dbPath: String
+        
+        public init(instigator: ESProcess, errorCode: Int32, accountType: es_od_account_type_t, accountName: String, nodeName: String, dbPath: String) {
+            self.instigator = instigator
+            self.errorCode = errorCode
+            self.accountType = accountType
+            self.accountName = accountName
+            self.nodeName = nodeName
+            self.dbPath = dbPath
+        }
+    }
+    
+    /// Notification that a user account was disabled.
+    struct ODDisableUser: Equatable, Codable {
+        /// Process that instigated operation (XPC caller).
+        public var instigator: ESProcess
+        
+        /// 0 indicates the operation succeeded.
+        /// Values inidicating specific failure reasons are defined in odconstants.h.
+        public var errorCode: Int32
+        
+        /// The name of the user account that was created.
+        public var userName: String
+        
+        /// OD node being mutated.
+        /// Typically one of "/Local/Default", "/LDAPv3/<server>" or "/Active Directory/<domain>".
+        public var nodeName: String
+        
+        /// Optional.  If node_name is "/Local/Default", this is the path of the database
+        /// against which OD is authenticating.
+        public var dbPath: String
+        
+        public init(instigator: ESProcess, errorCode: Int32, userName: String, nodeName: String, dbPath: String) {
+            self.instigator = instigator
+            self.errorCode = errorCode
+            self.userName = userName
+            self.nodeName = nodeName
+            self.dbPath = dbPath
+        }
+    }
+    
+    /// Notification that a user account was enabled.
+    struct ODEnableUser: Equatable, Codable {
+        /// Process that instigated operation (XPC caller).
+        public var instigator: ESProcess
+        
+        /// 0 indicates the operation succeeded.
+        /// Values inidicating specific failure reasons are defined in odconstants.h.
+        public var errorCode: Int32
+        
+        /// The name of the user account that was created.
+        public var userName: String
+        
+        /// OD node being mutated.
+        /// Typically one of "/Local/Default", "/LDAPv3/<server>" or "/Active Directory/<domain>".
+        public var nodeName: String
+        
+        /// Optional.  If node_name is "/Local/Default", this is the path of the database
+        /// against which OD is authenticating.
+        public var dbPath: String
+        
+        public init(instigator: ESProcess, errorCode: Int32, userName: String, nodeName: String, dbPath: String) {
+            self.instigator = instigator
+            self.errorCode = errorCode
+            self.userName = userName
+            self.nodeName = nodeName
+            self.dbPath = dbPath
+        }
+    }
+    
+    /// Notification that an attribute value was added to a record.
+    ///
+    /// - Note: Attributes conceptually have the type `Map String (Set String)`.
+    /// Each OD record has a Map of attribute name to Set of attribute value.
+    /// When an attribute value is added, it is inserted into the set of values for that name.
+    struct ODAttributeValueAdd: Equatable, Codable {
+        /// Process that instigated operation (XPC caller).
+        public var instigator: ESProcess
+        
+        /// 0 indicates the operation succeeded.
+        /// Values inidicating specific failure reasons are defined in odconstants.h.
+        public var errorCode: Int32
+        
+        /// The type of the record to which the attribute value was added.
+        public var recordType: es_od_record_type_t
+        
+        /// The name of the record to which the attribute value was added.
+        public var recordName: String
+        
+        /// The name of the attribute to which the value was added.
+        public var attributeName: String
+        
+        /// The value that was added.
+        public var attributeValue: String
+        
+        /// OD node being mutated.
+        /// Typically one of "/Local/Default", "/LDAPv3/<server>" or "/Active Directory/<domain>".
+        public var nodeName: String
+        
+        /// Optional.  If node_name is "/Local/Default", this is the path of the database
+        /// against which OD is authenticating.
+        public var dbPath: String
+        
+        public init(instigator: ESProcess, errorCode: Int32, recordType: es_od_record_type_t, recordName: String, attributeName: String, attributeValue: String, nodeName: String, dbPath: String) {
+            self.instigator = instigator
+            self.errorCode = errorCode
+            self.recordType = recordType
+            self.recordName = recordName
+            self.attributeName = attributeName
+            self.attributeValue = attributeValue
+            self.nodeName = nodeName
+            self.dbPath = dbPath
+        }
+    }
+    
+    /// Notification that an attribute value was removed from a record.
+    ///
+    /// - Note: Attributes conceptually have the type `Map String (Set String)`.
+    /// Each OD record has a Map of attribute name to Set of attribute value.
+    /// When an attribute value is removed, it is subtraced from the set of values for that name.
+    ///
+    /// - Note: Removing a value that was never added is a no-op.
+    struct ODAttributeValueRemove: Equatable, Codable {
+        /// Process that instigated operation (XPC caller).
+        public var instigator: ESProcess
+        
+        /// 0 indicates the operation succeeded.
+        /// Values inidicating specific failure reasons are defined in odconstants.h.
+        public var errorCode: Int32
+        
+        /// The type of the record from which the attribute value was removed.
+        public var recordType: es_od_record_type_t
+        
+        /// The name of the record from which the attribute value was removed.
+        public var recordName: String
+        
+        /// The name of the attribute from which the value was removed.
+        public var attributeName: String
+        
+        /// The value that was removed.
+        public var attributeValue: String
+        
+        /// OD node being mutated.
+        /// Typically one of "/Local/Default", "/LDAPv3/<server>" or "/Active Directory/<domain>".
+        public var nodeName: String
+        
+        /// Optional.  If node_name is "/Local/Default", this is the path of the database
+        /// against which OD is authenticating.
+        public var dbPath: String
+        
+        public init(instigator: ESProcess, errorCode: Int32, recordType: es_od_record_type_t, recordName: String, attributeName: String, attributeValue: String, nodeName: String, dbPath: String) {
+            self.instigator = instigator
+            self.errorCode = errorCode
+            self.recordType = recordType
+            self.recordName = recordName
+            self.attributeName = attributeName
+            self.attributeValue = attributeValue
+            self.nodeName = nodeName
+            self.dbPath = dbPath
+        }
+    }
+    
+    /// brief Notification that an attribute is being set.
+    ///
+    /// - Note: Attributes conceptually have the type `Map String (Set String)`.
+    /// Each OD record has a Map of attribute name to Set of attribute value.
+    /// An attribute set operation indicates the entire set of attribute values was replaced.
+    ///
+    /// - Note: The new set of attribute values may be empty.
+    struct ODAttributeSet: Equatable, Codable {
+        /// Process that instigated operation (XPC caller).
+        public var instigator: ESProcess
+        
+        /// 0 indicates the operation succeeded.
+        /// Values inidicating specific failure reasons are defined in odconstants.h.
+        public var errorCode: Int32
+        
+        /// The type of the record for which the attribute is being set.
+        public var recordType: es_od_record_type_t
+        
+        /// The name of the record for which the attribute is being set.
+        public var recordName: String
+        
+        /// The name of the attribute that was set.
+        public var attributeName: String
+        
+        /// Array of attribute values that were set.
+        public var attributeValues: [String]
+        
+        /// OD node being mutated.
+        /// Typically one of "/Local/Default", "/LDAPv3/<server>" or "/Active Directory/<domain>".
+        public var nodeName: String
+        
+        /// Optional.  If node_name is "/Local/Default", this is the path of the database
+        /// against which OD is authenticating.
+        public var dbPath: String
+        
+        public init(instigator: ESProcess, errorCode: Int32, recordType: es_od_record_type_t, recordName: String, attributeName: String, attributeValues: [String], nodeName: String, dbPath: String) {
+            self.instigator = instigator
+            self.errorCode = errorCode
+            self.recordType = recordType
+            self.recordName = recordName
+            self.attributeName = attributeName
+            self.attributeValues = attributeValues
+            self.nodeName = nodeName
+            self.dbPath = dbPath
+        }
+    }
+    
+    /// Notification that a user account was created.
+    struct ODCreateUser: Equatable, Codable {
+        /// Process that instigated operation (XPC caller).
+        public var instigator: ESProcess
+        
+        /// 0 indicates the operation succeeded.
+        /// Values inidicating specific failure reasons are defined in odconstants.h.
+        public var errorCode: Int32
+        
+        /// The name of the user account that was created.
+        public var userName: String
+        
+        /// OD node being mutated.
+        /// Typically one of "/Local/Default", "/LDAPv3/<server>" or "/Active Directory/<domain>".
+        public var nodeName: String
+        
+        /// Optional.  If node_name is "/Local/Default", this is the path of the database
+        /// against which OD is authenticating.
+        public var dbPath: String
+        
+        public init(instigator: ESProcess, errorCode: Int32, userName: String, nodeName: String, dbPath: String) {
+            self.instigator = instigator
+            self.errorCode = errorCode
+            self.userName = userName
+            self.nodeName = nodeName
+            self.dbPath = dbPath
+        }
+    }
+    
+    /// Notification that a group was created.
+    struct ODCreateGroup: Equatable, Codable {
+        /// Process that instigated operation (XPC caller).
+        public var instigator: ESProcess
+        
+        /// 0 indicates the operation succeeded.
+        /// Values inidicating specific failure reasons are defined in odconstants.h.
+        public var errorCode: Int32
+        
+        /// The name of the group that was created.
+        public var groupName: String
+        
+        /// OD node being mutated.
+        /// Typically one of "/Local/Default", "/LDAPv3/<server>" or "/Active Directory/<domain>".
+        public var nodeName: String
+        
+        /// Optional.  If node_name is "/Local/Default", this is the path of the database
+        /// against which OD is authenticating.
+        public var dbPath: String
+        
+        public init(instigator: ESProcess, errorCode: Int32, groupName: String, nodeName: String, dbPath: String) {
+            self.instigator = instigator
+            self.errorCode = errorCode
+            self.groupName = groupName
+            self.nodeName = nodeName
+            self.dbPath = dbPath
+        }
+    }
+    
+    /// Notification that a user account was deleted.
+    struct ODDeleteUser: Equatable, Codable {
+        /// Process that instigated operation (XPC caller).
+        public var instigator: ESProcess
+        
+        /// 0 indicates the operation succeeded.
+        /// Values inidicating specific failure reasons are defined in odconstants.h.
+        public var errorCode: Int32
+        
+        /// The name of the user account that was deleted.
+        public var userName: String
+        
+        /// OD node being mutated.
+        /// Typically one of "/Local/Default", "/LDAPv3/<server>" or "/Active Directory/<domain>".
+        public var nodeName: String
+        
+        /// Optional.  If node_name is "/Local/Default", this is the path of the database
+        /// against which OD is authenticating.
+        public var dbPath: String
+        
+        public init(instigator: ESProcess, errorCode: Int32, userName: String, nodeName: String, dbPath: String) {
+            self.instigator = instigator
+            self.errorCode = errorCode
+            self.userName = userName
+            self.nodeName = nodeName
+            self.dbPath = dbPath
+        }
+    }
+    
+    /// Notification that a group was deleted.
+    struct ODDeleteGroup: Equatable, Codable {
+        /// Process that instigated operation (XPC caller).
+        public var instigator: ESProcess
+        
+        /// 0 indicates the operation succeeded.
+        /// Values inidicating specific failure reasons are defined in odconstants.h.
+        public var errorCode: Int32
+        
+        /// The name of the group that was deleted.
+        public var groupName: String
+        
+        /// OD node being mutated.
+        /// Typically one of "/Local/Default", "/LDAPv3/<server>" or "/Active Directory/<domain>".
+        public var nodeName: String
+        
+        /// Optional.  If node_name is "/Local/Default", this is the path of the database
+        /// against which OD is authenticating.
+        public var dbPath: String
+        
+        public init(instigator: ESProcess, errorCode: Int32, groupName: String, nodeName: String, dbPath: String) {
+            self.instigator = instigator
+            self.errorCode = errorCode
+            self.groupName = groupName
+            self.nodeName = nodeName
+            self.dbPath = dbPath
+        }
+    }
+    
+    /// Notification for an XPC connection being established to a named service.
+    struct XPCConnect: Equatable, Codable {
+        /// Service name of the named service.
+        public var serviceName: String
+        
+        /// The type of XPC domain in which the service resides in.
+        public var serviceDomainType: es_xpc_domain_type_t
+        
+        public init(serviceName: String, serviceDomainType: es_xpc_domain_type_t) {
+            self.serviceName = serviceName
+            self.serviceDomainType = serviceDomainType
         }
     }
 }
