@@ -158,6 +158,8 @@ public struct BTMLaunchItem: Equatable, Codable {
     }
 }
 
+#if swift(>=5.9) // Xcode 14 support.
+
 public struct ESProfile: Equatable, Codable {
     public var identifier: String
     public var uuid: String
@@ -188,11 +190,15 @@ public enum ESODMemberID: Equatable, Codable {
     case groupUUID(UUID)
 }
 
+#endif
+
 public enum ESEvent: Equatable, Codable {
     case access(Access)
     case authentication(Authentication)
+#if swift(>=5.9) // Xcode 14 support.
     case authorizationJudgement(AuthorizationJudgement)
     case authorizationPetition(AuthorizationPetition)
+#endif
     case btmLaunchItemAdd(BTMLaunchItemAdd)
     case btmLaunchItemRemove(BTMLaunchItemRemove)
     case chdir(Chdir)
@@ -233,6 +239,7 @@ public enum ESEvent: Equatable, Codable {
     case mmap(MMap)
     case mount(Mount)
     case mprotect(MProtect)
+#if swift(>=5.9) // Xcode 14 support.
     case odAttributeSet(ODAttributeSet)
     case odAttributeValueAdd(ODAttributeValueAdd)
     case odAttributeValueRemove(ODAttributeValueRemove)
@@ -246,13 +253,16 @@ public enum ESEvent: Equatable, Codable {
     case odGroupRemove(ODGroupRemove)
     case odGroupSet(ODGroupSet)
     case odModifyPassword(ODModifyPassword)
+#endif
     case open(Open)
     case opensshLogin(OpensshLogin)
     case opensshLogout(OpensshLogout)
     case procCheck(ProcCheck)
     case procSuspendResume(ProcSuspendResume)
+#if swift(>=5.9) // Xcode 14 support.
     case profileAdd(ProfileAdd)
     case profileRemove(ProfileRemove)
+#endif
     case ptyClose(PtyClose)
     case ptyGrant(PtyGrant)
     case readdir(Readdir)
@@ -274,8 +284,10 @@ public enum ESEvent: Equatable, Codable {
     case setuid(SetUID)
     case signal(Signal)
     case stat(Stat)
+#if swift(>=5.9) // Xcode 14 support.
     case su(SU)
     case sudo(SUDO)
+#endif
     case trace(Trace)
     case truncate(Truncate)
     case uipcBind(UipcBind)
@@ -286,7 +298,9 @@ public enum ESEvent: Equatable, Codable {
     case write(Write)
     case xpMalwareDetected(XPMalwareDetected)
     case xpMalwareRemediated(XPMalwareRemediated)
+#if swift(>=5.9) // Xcode 14 support.
     case xpcConnect(XPCConnect)
+#endif
 }
 
 public extension ESEvent {
@@ -823,6 +837,7 @@ public extension ESEvent {
         }
     }
     
+#if swift(>=5.9) // Xcode 14 support.
     struct ProfileAdd: Equatable, Codable {
         public var instigator: ESProcess
         public var isUpdate: Bool
@@ -844,6 +859,7 @@ public extension ESEvent {
             self.profile = profile
         }
     }
+#endif
     
     struct PtyClose: Equatable, Codable {
         public var dev: dev_t
@@ -1184,6 +1200,7 @@ public extension ESEvent {
         }
     }
     
+#if swift(>=5.9) // Xcode 14 support.
     struct SU: Equatable, Codable {
         public var success: Bool
         public var failureMessage: String
@@ -1771,6 +1788,7 @@ public extension ESEvent {
             self.serviceDomainType = serviceDomainType
         }
     }
+#endif
 }
 
 extension ESEvent.Create.Destination {

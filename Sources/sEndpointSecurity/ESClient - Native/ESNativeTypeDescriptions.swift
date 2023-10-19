@@ -288,6 +288,7 @@ extension es_event_type_t: ESNativeType {
             return "ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_ADD"
         case ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_REMOVE:
             return "ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_REMOVE"
+#if swift(>=5.9) // Xcode 14 support.
         case ES_EVENT_TYPE_NOTIFY_PROFILE_ADD:
             return "ES_EVENT_TYPE_NOTIFY_PROFILE_ADD"
         case ES_EVENT_TYPE_NOTIFY_PROFILE_REMOVE:
@@ -328,6 +329,7 @@ extension es_event_type_t: ESNativeType {
             return "ES_EVENT_TYPE_NOTIFY_OD_DELETE_GROUP"
         case ES_EVENT_TYPE_NOTIFY_XPC_CONNECT:
             return "ES_EVENT_TYPE_NOTIFY_XPC_CONNECT"
+#endif
         default:
             return nil
         }
@@ -642,6 +644,8 @@ extension es_address_type_t: ESNativeType {
     }
 }
 
+#if swift(>=5.9) // Xcode 14 support.
+
 extension es_profile_source_t: ESNativeType {
     fileprivate var name: String? {
         switch self {
@@ -749,3 +753,5 @@ extension es_xpc_domain_type_t: ESNativeType {
         }
     }
 }
+
+#endif

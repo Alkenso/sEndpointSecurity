@@ -162,6 +162,8 @@ public extension ESConverter {
         )
     }
     
+#if swift(>=5.9) // Xcode 14 support.
+
     func esProfile(_ es: es_profile_t) -> ESProfile {
         .init(
             identifier: esString(es.identifier),
@@ -204,6 +206,7 @@ public extension ESConverter {
             throw CommonError.invalidArgument(arg: "es_od_member_id_t", invalidValue: es.pointee.member_type)
         }
     }
+#endif
     
     func esEvent(_ type: es_event_type_t, _ event: es_events_t) throws -> ESEvent {
         switch type {
@@ -459,6 +462,7 @@ public extension ESConverter {
         case ES_EVENT_TYPE_NOTIFY_BTM_LAUNCH_ITEM_REMOVE:
             return .btmLaunchItemRemove(esEvent(btmLaunchItemRemove: event.btm_launch_item_remove))
         // macOS 14.0:
+#if swift(>=5.9) // Xcode 14 support.
         case ES_EVENT_TYPE_NOTIFY_PROFILE_ADD:
             return .profileAdd(esEvent(profileAdd: event.profile_add.pointee))
         case ES_EVENT_TYPE_NOTIFY_PROFILE_REMOVE:
@@ -499,6 +503,7 @@ public extension ESConverter {
             return .odDeleteGroup(esEvent(odDeleteGroup: event.od_delete_group.pointee))
         case ES_EVENT_TYPE_NOTIFY_XPC_CONNECT:
             return .xpcConnect(esEvent(xpcConnect: event.xpc_connect.pointee))
+#endif
         default:
             throw CommonError.invalidArgument(arg: "es_event_type_t", invalidValue: type)
         }
@@ -970,6 +975,7 @@ public extension ESConverter {
         )
     }
     
+#if swift(>=5.9) // Xcode 14 support.
     func esEvent(profileAdd es: es_event_profile_add_t) -> ESEvent.ProfileAdd {
         .init(
             instigator: esProcess(es.instigator),
@@ -1190,4 +1196,6 @@ public extension ESConverter {
     func esEvent(xpcConnect es: es_event_xpc_connect_t) -> ESEvent.XPCConnect {
         .init(serviceName: esString(es.service_name), serviceDomainType: es.service_domain_type)
     }
+    
+#endif
 }
