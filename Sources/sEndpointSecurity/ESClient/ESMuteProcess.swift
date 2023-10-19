@@ -22,9 +22,9 @@
 
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 
-private let log = SCLogger.internalLog(.client)
+private let log = SpellbookLogger.internalLog(.client)
 
 internal final class ESMuteProcess {
     private let client: ESNativeClient

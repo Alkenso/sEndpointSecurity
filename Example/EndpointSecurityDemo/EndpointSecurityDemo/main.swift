@@ -3,7 +3,7 @@ import sEndpointSecurity
 import Combine
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 
 class Main {
     init() {

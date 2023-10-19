@@ -2,7 +2,7 @@
 
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 import XCTest
 
 class ESMuteProcessTests: XCTestCase {

@@ -22,7 +22,7 @@
 
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 
 public struct ESAuthResolution: Equatable, Codable {
     public var result: ESAuthResult

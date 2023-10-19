@@ -12,19 +12,19 @@ let package = Package(
         .library(name: "sEndpointSecurity", targets: ["sEndpointSecurity"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/Alkenso/SwiftConvenience.git", exact: "0.2.0"),
+        .package(url: "https://github.com/Alkenso/SwiftSpellbook.git", exact: "0.3.0"),
     ],
     targets: [
         .target(
             name: "sEndpointSecurity",
-            dependencies: ["SwiftConvenience"],
+            dependencies: [.product(name: "SpellbookFoundation", package: "SwiftSpellbook")],
             linkerSettings: [.linkedLibrary("EndpointSecurity")]
         ),
         .testTarget(
             name: "sEndpointSecurityTests",
             dependencies: [
                 "sEndpointSecurity",
-                .product(name: "SwiftConvenienceTestUtils", package: "SwiftConvenience"),
+                .product(name: "SpellbookTestUtils", package: "SwiftSpellbook"),
             ]
         ),
     ]

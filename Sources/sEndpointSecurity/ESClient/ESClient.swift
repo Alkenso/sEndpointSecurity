@@ -23,9 +23,9 @@
 import Combine
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 
-private let log = SCLogger.internalLog(.client)
+private let log = SpellbookLogger.internalLog(.client)
 
 public final class ESClient: ESClientProtocol {
     /// Initialise a new ESClient and connect to the ES subsystem. No-throw version

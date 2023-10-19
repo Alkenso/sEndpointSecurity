@@ -2,8 +2,8 @@
 
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
-import SwiftConvenienceTestUtils
+import SpellbookFoundation
+import SpellbookTestUtils
 import XCTest
 
 class ESServiceTests: XCTestCase {

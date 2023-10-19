@@ -21,7 +21,7 @@
 //  SOFTWARE.
 
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 
 public enum sEndpointSecurityLog {
     public static let subsystem = "sEndpointSecurity"
@@ -33,8 +33,8 @@ public enum sEndpointSecurityLog {
     }
 }
 
-extension SCLog {
-    internal static func internalLog(_ category: sEndpointSecurityLog.Category) -> SCLog {
-        SCLogger.default.with(subsystem: sEndpointSecurityLog.subsystem, category: category.rawValue)
+extension SpellbookLog {
+    internal static func internalLog(_ category: sEndpointSecurityLog.Category) -> SpellbookLog {
+        SpellbookLogger.default.with(subsystem: sEndpointSecurityLog.subsystem, category: category.rawValue)
     }
 }

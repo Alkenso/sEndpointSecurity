@@ -22,7 +22,7 @@
 
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 
 @dynamicMemberLookup
 public final class ESMessagePtr {

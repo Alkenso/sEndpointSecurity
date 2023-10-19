@@ -2,7 +2,7 @@ import sEndpointSecurity
 
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 
 extension audit_token_t {
     static func random() -> audit_token_t {

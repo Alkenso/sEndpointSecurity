@@ -22,9 +22,9 @@
 
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 
-private let log = SCLogger.internalLog(.xpc)
+private let log = SpellbookLogger.internalLog(.xpc)
 
 internal final class ESXPCConnection {
     typealias ConnectResult = Result<es_new_client_result_t, Error>

@@ -22,7 +22,7 @@
 
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 
 public struct ESMessage: Equatable, Codable {
     public var version: UInt32

@@ -22,7 +22,7 @@
 
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 
 public struct ESConverter {
     public var version: UInt32

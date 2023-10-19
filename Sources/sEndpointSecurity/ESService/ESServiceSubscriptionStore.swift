@@ -22,9 +22,9 @@
 
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 
-private let log = SCLogger.internalLog(.service)
+private let log = SpellbookLogger.internalLog(.service)
 
 internal final class ESServiceSubscriptionStore {
     final class Entry {

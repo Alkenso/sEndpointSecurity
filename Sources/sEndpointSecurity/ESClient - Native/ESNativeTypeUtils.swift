@@ -22,7 +22,7 @@
 
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 
 extension es_event_exec_t {
     public var args: [String] {

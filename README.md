@@ -112,4 +112,4 @@ withExtendedLifetime(service) { RunLoop.main.run() }
 ```
 
 # Dependencies
-The package is designed with the minimum dependencies. At the moment, it it the only one utility library SwiftConvenience (no additional dependencies)
+The package is designed with the minimum dependencies. At the moment, it it the only one utility library SwiftSpellbook (no additional dependencies)

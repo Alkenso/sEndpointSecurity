@@ -21,7 +21,7 @@
 //  SOFTWARE.
 
 import EndpointSecurity
-import SwiftConvenience
+import SpellbookFoundation
 
 public protocol ESNativeClient {
     var native: OpaquePointer { get }

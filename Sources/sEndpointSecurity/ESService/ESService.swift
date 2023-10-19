@@ -22,9 +22,9 @@
 
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 
-private let log = SCLogger.internalLog(.service)
+private let log = SpellbookLogger.internalLog(.service)
 
 /// ESService provides muliclient support for dealing with EndpointSecurity events
 /// without need of managing many native `es_client(s)` (at least there is OS limit for latter).

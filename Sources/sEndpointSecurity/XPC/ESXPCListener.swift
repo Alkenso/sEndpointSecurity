@@ -23,9 +23,9 @@
 import Combine
 import EndpointSecurity
 import Foundation
-import SwiftConvenience
+import SpellbookFoundation
 
-private let log = SCLogger.internalLog(.xpc)
+private let log = SpellbookLogger.internalLog(.xpc)
 
 public final class ESXPCListener: NSObject {
     private let createClient: () throws -> ESClient
