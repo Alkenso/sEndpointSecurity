@@ -1,5 +1,16 @@
 # sEndpointSecurity
 
+<p>
+  <img src="https://img.shields.io/badge/swift-5.7 | 5.8 | 5.9-orange" />
+  <img src="https://img.shields.io/badge/platforms-macOS 11.0-freshgreen" />
+  <img src="https://img.shields.io/badge/Xcode-14 | 15-blue" />
+  <img src="https://github.com/Alkenso/sEndpointSecurity/actions/workflows/main.yml/badge.svg" />
+</p>
+
+If you've found this or other my libraries helpful, please buy me some pizza
+
+<a href="https://www.buymeacoffee.com/alkenso"><img src="https://img.buymeacoffee.com/button-api/?text=Buy me a pizza&emoji=🍕&slug=alkenso&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" /></a>
+
 # Intro
 With macOS 10.15 Catalina, Apple released beautiful framework EndpointSecurity. It is a usermode replacement for kAuth and MACF mechanisms previously available only from the Kernel.
 
