@@ -137,11 +137,11 @@ class ESServiceTests: XCTestCase {
     private func emitMessage(path: String, signingID: String, teamID: String, event: es_event_type_t) {
         let message = createMessage(path: path, signingID: signingID, teamID: teamID, event: event, isAuth: false)
         Self.emitQueue.async { [self] in
-            let messagePtr = ESMessagePtr(unowned: message.unsafeValue)
+            let messagePtr = ESMessagePtr(unowned: message.wrappedValue)
             let process = try! messagePtr.converted().process
             _ = es.pathInterestHandler?(process)
             _ = es.notifyMessageHandler?(messagePtr)
-            Self.emitQueue.asyncAfter(deadline: .now() + 1, execute: message.cleanup)
+            Self.emitQueue.asyncAfter(deadline: .now() + 1) { message.reset() } 
         }
     }
 }

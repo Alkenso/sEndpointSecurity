@@ -94,7 +94,7 @@ public final class ESSubscriptionControl {
         try sharedState.lock.withLock {
             guard !sharedState.isSubscribed else { return }
             try _subscribe()
-            OSAtomicCompareAndSwap64(0, 1, &sharedState.subscribed)
+            OSAtomicCompareAndSwap64(0, 1, sharedState.subscribed)
         }
     }
     
@@ -104,16 +104,20 @@ public final class ESSubscriptionControl {
         try sharedState.lock.withLock {
             guard sharedState.isSubscribed else { return }
             try _unsubscribe()
-            OSAtomicCompareAndSwap64(1, 0, &sharedState.subscribed)
+            OSAtomicCompareAndSwap64(1, 0, sharedState.subscribed)
         }
     }
 }
 
 internal final class SubscriptionState {
-    fileprivate var subscribed: Int64 = 0
+    @Resource fileprivate var subscribed: UnsafeMutablePointer<Int64>
     fileprivate weak var control: ESSubscriptionControl?
     fileprivate var lock = UnfairLock()
     
-    var isSubscribed: Bool { OSAtomicAdd64(0, &subscribed) == 1 }
+    init() {
+        _subscribed = .pointer(value: 0)
+    }
+    
+    var isSubscribed: Bool { OSAtomicAdd64(0, subscribed) == 1 }
     var isAlive: Bool { control != nil }
 }

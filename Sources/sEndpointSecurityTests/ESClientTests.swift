@@ -221,8 +221,8 @@ class ESClientTests: XCTestCase {
     private func emitMessage(path: String, signingID: String, teamID: String, event: es_event_type_t, isAuth: Bool) {
         let message = createMessage(path: path, signingID: signingID, teamID: teamID, event: event, isAuth: isAuth)
         Self.emitQueue.async { [self] in
-            handler(OpaquePointer(Unmanaged.passUnretained(native).toOpaque()), message.unsafeValue)
-            Self.emitQueue.asyncAfter(deadline: .now() + 1, execute: message.cleanup)
+            handler(OpaquePointer(Unmanaged.passUnretained(native).toOpaque()), message.wrappedValue)
+            Self.emitQueue.asyncAfter(deadline: .now() + 1) { message.reset() }
         }
     }
 }
