@@ -54,21 +54,25 @@ public final class ESXPCClient: ESClientProtocol {
         set { connection.reconnectDelay = newValue }
     }
 
-    public func activate(completion: @escaping (Result<es_new_client_result_t, Error>) -> Void) {
+    public func tryActivate(completion: @escaping (Result<es_new_client_result_t, Error>) -> Void) {
         activate(async: true, completion: completion)
     }
-
-    public func activate() throws -> es_new_client_result_t {
+    
+    public func tryActivate() throws -> es_new_client_result_t {
         var result: Result<es_new_client_result_t, Error>!
         activate(async: false) { result = $0 }
         return try result.get()
+    }
+    
+    public func activate() {
+        activate(async: true, completion: nil)
     }
 
     public func invalidate() {
         connection.invalidate()
     }
 
-    private func activate(async: Bool, completion: @escaping (Result<es_new_client_result_t, Error>) -> Void) {
+    private func activate(async: Bool, completion: ((Result<es_new_client_result_t, Error>) -> Void)?) {
         delegate.queue = queue
         delegate.pathInterestHandler = pathInterestHandler
         delegate.authMessageHandler = authMessageHandler
