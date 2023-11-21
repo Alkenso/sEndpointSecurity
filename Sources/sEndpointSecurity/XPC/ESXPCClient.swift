@@ -27,7 +27,7 @@ import SpellbookFoundation
 private let log = SpellbookLogger.internalLog(.xpc)
 
 public final class ESXPCClient: ESClientProtocol {
-    @Atomic private var connection: ESXPCConnection
+    private let connection: ESXPCConnection
     private let delegate: ESClientXPCDelegate
     private let syncExecutor: SynchronousExecutor
     private let connectionLock = NSRecursiveLock()
@@ -82,7 +82,12 @@ public final class ESXPCClient: ESClientProtocol {
         connection.connectionStateHandler = { [weak self] in self?.handleConnectionStateChanged($0) }
         connection.converterConfig = converterConfig
 
-        connection.connect(async: async, notify: completion)
+        // Mandatory because behaviour depends on if `completion` is nil or not.
+        if let completion {
+            connection.connect(async: async) { [queue] result in queue.async { completion(result) } }
+        } else {
+            connection.connect(async: async, notify: nil)
+        }
     }
     
     private func handleConnectionStateChanged(_ result: Result<es_new_client_result_t, Error>) {
@@ -322,11 +327,9 @@ private final class ESClientXPCDelegate: NSObject, ESClientXPCDelegateProtocol {
     var authMessageHandler: ((ESMessage, @escaping (ESAuthResolution) -> Void) -> Void)?
     var notifyMessageHandler: ((ESMessage) -> Void)?
     var receiveCustomMessageHandler: ((Data, @escaping (Result<Data, Error>) -> Void) -> Void)?
-
-    var errorLogHandler: ((Error) -> Void)?
     
     private static let fallback = ESAuthResolution.allowOnce
-
+    
     func handlePathInterest(_ data: Data, reply: @escaping (Data?) -> Void) {
         guard let pathInterestHandler else {
             reply(nil); return

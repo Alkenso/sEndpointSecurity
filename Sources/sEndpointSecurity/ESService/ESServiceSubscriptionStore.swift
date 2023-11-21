@@ -42,6 +42,7 @@ internal final class ESServiceSubscriptionStore {
     internal private(set) var subscriptions: [Entry] = []
     private var subscriptionEvents: [es_event_type_t: [Entry]] = [:]
     
+    var pathInterestHandler: (ESProcess) -> ESInterest = { _ in .listen() }
     var converterConfig: ESConverter.Config = .default
     
     // MARK: Managing subscriptions
@@ -77,7 +78,13 @@ internal final class ESServiceSubscriptionStore {
             pathInterests[process.executable.path, default: [:]][identifier] = interest.events
         }
         
-        return ESInterest.combine(.permissive, resolutions) ?? .listen()
+        let subscriptionsInterest = ESInterest.combine(.permissive, resolutions) ?? .listen()
+        
+        let totalInterest = ESInterest.combine(
+            .restrictive,
+            [subscriptionsInterest, pathInterestHandler(process)]
+        ) ?? .listen()
+        return totalInterest
     }
     
     func handleAuthMessage(_ rawMessage: ESMessagePtr, reply: @escaping (ESAuthResolution) -> Void) {

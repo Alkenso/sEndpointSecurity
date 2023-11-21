@@ -46,32 +46,72 @@ private let log = SpellbookLogger.internalLog(.service)
 /// Suspended subscriptions would NOT receive events while they remain suspended.
 public final class ESService: ESServiceRegistering {
     private typealias Client = any ESClientProtocol
-    private let createES: (String, ESServiceSubscriptionStore) throws -> Client
+    private let createES: (ESService) throws -> Client
     private let store = ESServiceSubscriptionStore()
     private var client: Client?
     private var isActivated = false
     private var activationLock = UnfairLock()
     
+    /// Create `ESService` that internally creates and manages default-create `ESClient`.
     public convenience init() {
         self.init(createES: ESClient.init)
     }
     
+    /// Create `ESService` with factory that creates `ESClient` instances.
+    /// `ESService` will override any of created client handlers and rely on fact that
+    /// client it totally owned and managed by the Service.
     public init<C: ESClientProtocol>(createES: @escaping (String) throws -> C) where C.Message == ESMessage {
-        self.createES = { name, store in
-            let client = try createES(name)
-            client.authMessageHandler = store.handleAuthMessage
-            client.notifyMessageHandler = store.handleNotifyMessage
+        self.createES = { service in
+            let client = try createES(service.clientName)
+            service.setupClient(client)
             return client
         }
     }
     
+    /// Create `ESService` with factory that creates `ESClient` instances.
+    /// `ESService` will override any of created client handlers and rely on fact that
+    /// client it totally owned and managed by the Service.
     public init<C: ESClientProtocol>(createES: @escaping (String) throws -> C) where C.Message == ESMessagePtr {
-        self.createES = { name, store in
-            let client = try createES(name)
-            client.authMessageHandler = store.handleAuthMessage
-            client.notifyMessageHandler = store.handleNotifyMessage
+        self.createES = { service in
+            let client = try createES(service.clientName)
+            service.setupClient(client)
             return client
         }
+    }
+    
+    /// Create `ESService` with externally created `ESClient`.
+    /// `ESService` will override any of passed client handlers and rely on fact that
+    /// client it totally owned and managed by the Service.
+    public init<C: ESClientProtocol>(_ client: C) where C.Message == ESMessage {
+        self.createES = { _ in client }
+        setupClient(client)
+    }
+    
+    /// Create `ESService` with externally created `ESClient`.
+    /// `ESService` will override any of passed client handlers and rely on fact that
+    /// client it totally owned and managed by the Service.
+    public init<C: ESClientProtocol>(_ client: C) where C.Message == ESMessagePtr {
+        self.createES = { _ in client }
+        setupClient(client)
+    }
+    
+    private var clientName: String { "ESService_\(ObjectIdentifier(self))" }
+    
+    private func setupClient<C: ESClientProtocol>(_ client: C) where C.Message == ESMessage {
+        client.authMessageHandler = store.handleAuthMessage
+        client.notifyMessageHandler = store.handleNotifyMessage
+        return setupAnyClient(client)
+    }
+    
+    private func setupClient<C: ESClientProtocol>(_ client: C) where C.Message == ESMessagePtr {
+        client.authMessageHandler = store.handleAuthMessage
+        client.notifyMessageHandler = store.handleNotifyMessage
+        return setupAnyClient(client)
+    }
+    
+    private func setupAnyClient(_ client: some ESClientProtocol) {
+        client.pathInterestHandler = store.pathInterest
+        client.queue = nil
     }
     
     /// Perform service-level process filtering, additionally to muting of path and processes for all clients.
@@ -101,7 +141,10 @@ public final class ESService: ESServiceRegistering {
     /// - Warning: Perfonamce-sensitive handler, called **synchronously** once for each process path.
     /// Do here as minimum work as possible.
     /// - Warning: The property MUST NOT be changed while the service is activated.
-    public var pathInterestHandler: (ESProcess) -> ESInterest = { _ in .listen() }
+    public var pathInterestHandler: (ESProcess) -> ESInterest {
+        get { store.pathInterestHandler }
+        set { store.pathInterestHandler = newValue }
+    }
     
     /// Registers the subscription. MUST be called before `activate`.
     /// At the moment registration is one-way operation.
@@ -158,15 +201,7 @@ public final class ESService: ESServiceRegistering {
     public func activate() throws {
         guard !activationLock.withLock({ isActivated }) else { return }
         
-        let client = try createES("ESService_\(ObjectIdentifier(self))", store)
-        
-        /// `authMessageHandler` and `notifyMessageHandler` are set in `createES` function
-        /// due to generic nature of underlying `Client` instance.
-        client.pathInterestHandler = { [store, pathInterestHandler] in
-            .combine(.restrictive, [store.pathInterest(in: $0), pathInterestHandler($0)]) ?? .listen()
-        }
-        client.queue = nil
-        
+        let client = try createES(self)
         self.client = client
         
         do {
