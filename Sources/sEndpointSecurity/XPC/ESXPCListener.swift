@@ -102,9 +102,13 @@ extension ESXPCListener: NSXPCListenerDelegate {
 }
 
 private final class ESXPCExportedObject: NSObject, ESClientXPCProtocol {
-    let id = UUID()
+    private let actionQueue: DispatchQueue
+    let id: UUID
     
     init(delegate: ESClientXPCDelegateProtocol, createClient: @escaping () throws -> ESClient) {
+        let id = UUID()
+        self.id = id
+        self.actionQueue = DispatchQueue(label: "ESXPCExportedObject.\(id).actions.queue")
         self.delegate = delegate
         self.createClient = createClient
     }
@@ -139,63 +143,63 @@ private final class ESXPCExportedObject: NSObject, ESClientXPCProtocol {
     
     func subscribe(_ events: [NSNumber], reply: @escaping (Error?) -> Void) {
         let converted = events.map(\.uint32Value).map(es_event_type_t.init(rawValue:))
-        withClient(reply: reply) { try $0.subscribe(converted) }
+        withClientOnActionQueue(reply: reply) { try $0.subscribe(converted) }
     }
     
     func unsubscribe(_ events: [NSNumber], reply: @escaping (Error?) -> Void) {
         let converted = events.map(\.uint32Value).map(es_event_type_t.init(rawValue:))
-        withClient(reply: reply) { try $0.unsubscribe(converted) }
+        withClientOnActionQueue(reply: reply) { try $0.unsubscribe(converted) }
     }
     
     func unsubscribeAll(reply: @escaping (Error?) -> Void) {
-        withClient(reply: reply) { try $0.unsubscribeAll() }
+        withClientOnActionQueue(reply: reply) { try $0.unsubscribeAll() }
     }
     
     func clearCache(reply: @escaping (Error?) -> Void) {
-        withClient(reply: reply) { try $0.clearCache() }
+        withClientOnActionQueue(reply: reply) { try $0.clearCache() }
     }
     
     func clearPathInterestCache(reply: @escaping (Error?) -> Void) {
-        withClient(reply: reply) { $0.clearPathInterestCache() }
+        withClientOnActionQueue(reply: reply) { $0.clearPathInterestCache() }
     }
     
     func mute(process mute: Data, events: [NSNumber], reply: @escaping (Error?) -> Void) {
-        withClient(reply: reply) {
+        withClientOnActionQueue(reply: reply) {
             let decoded = try xpcDecoder.decode(ESMuteProcessRule.self, from: mute)
             $0.mute(process: decoded, events: .fromNumbers(events))
         }
     }
     
     func unmute(process mute: Data, events: [NSNumber], reply: @escaping (Error?) -> Void) {
-        withClient(reply: reply) {
+        withClientOnActionQueue(reply: reply) {
             let decoded = try xpcDecoder.decode(ESMuteProcessRule.self, from: mute)
             $0.unmute(process: decoded, events: .fromNumbers(events))
         }
     }
     
     func unmuteAllProcesses(reply: @escaping (Error?) -> Void) {
-        withClient(reply: reply) { $0.unmuteAllProcesses() }
+        withClientOnActionQueue(reply: reply) { $0.unmuteAllProcesses() }
     }
     
     func mute(path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Error?) -> Void) {
-        withClient(reply: reply) { try $0.mute(path: path, type: type, events: .fromNumbers(events)) }
+        withClientOnActionQueue(reply: reply) { try $0.mute(path: path, type: type, events: .fromNumbers(events)) }
     }
     
     func unmute(path: String, type: es_mute_path_type_t, events: [NSNumber], reply: @escaping (Error?) -> Void) {
         if #available(macOS 12.0, *) {
-            withClient(reply: reply) { try $0.unmute(path: path, type: type, events: .fromNumbers(events)) }
+            withClientOnActionQueue(reply: reply) { try $0.unmute(path: path, type: type, events: .fromNumbers(events)) }
         } else {
             reply(CommonError.unexpected("unmute(path:) not available"))
         }
     }
     
     func unmuteAllPaths(reply: @escaping (Error?) -> Void) {
-        withClient(reply: reply) { try $0.unmuteAllPaths() }
+        withClientOnActionQueue(reply: reply) { try $0.unmuteAllPaths() }
     }
     
     func unmuteAllTargetPaths(reply: @escaping (Error?) -> Void) {
         if #available(macOS 13.0, *) {
-            withClient(reply: reply) { try $0.unmuteAllTargetPaths() }
+            withClientOnActionQueue(reply: reply) { try $0.unmuteAllTargetPaths() }
         } else {
             reply(CommonError.unexpected("unmuteAllTargetPaths not available"))
         }
@@ -203,23 +207,25 @@ private final class ESXPCExportedObject: NSObject, ESClientXPCProtocol {
     
     func invertMuting(_ muteType: es_mute_inversion_type_t, reply: @escaping (Error?) -> Void) {
         if #available(macOS 13.0, *) {
-            withClient(reply: reply) { try $0.invertMuting(muteType) }
+            withClientOnActionQueue(reply: reply) { try $0.invertMuting(muteType) }
         } else {
             reply(CommonError.unexpected("invertMuting not available"))
         }
     }
     
     func mutingInverted(_ muteType: es_mute_inversion_type_t, reply: @escaping (Bool, Error?) -> Void) {
-        if #available(macOS 13.0, *) {
-            if let result = withClient(
-                reply: { reply(false, $0) },
-                replyOnSuccess: false,
-                body: { try $0.mutingInverted(muteType) }
-            ) {
-                reply(result, nil)
+        actionQueue.async { [self] in
+            do {
+                if #available(macOS 13.0, *) {
+                    let client = try client.get(name: "ESClient")
+                    let result = try client.mutingInverted(muteType)
+                    reply(result, nil)
+                } else {
+                    throw CommonError.unexpected("mutingInverted not available")
+                }
+            } catch {
+                reply(false, error.xpcCompatible())
             }
-        } else {
-            reply(false, CommonError.unexpected("mutingInverted not available"))
         }
     }
     
@@ -304,18 +310,15 @@ private final class ESXPCExportedObject: NSObject, ESClientXPCProtocol {
         }
     }
     
-    @discardableResult
-    private func withClient<R>(reply: @escaping (Error?) -> Void, replyOnSuccess: Bool = true, body: (ESClient) throws -> R) -> R? {
-        do {
-            let client = try client.get(name: "ESClient")
-            let result = try body(client)
-            if replyOnSuccess {
+    private func withClientOnActionQueue(reply: @escaping (Error?) -> Void, body: @escaping (ESClient) throws -> Void) {
+        actionQueue.async { [self] in
+            do {
+                let client = try client.get(name: "ESClient")
+                try body(client)
                 reply(nil)
+            } catch {
+                reply(error.xpcCompatible())
             }
-            return result
-        } catch {
-            reply(error.xpcCompatible())
-            return nil
         }
     }
 }
