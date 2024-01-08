@@ -134,7 +134,7 @@ public final class ESClient: ESClientProtocol {
     ///     - returns: Boolean indicating success or error
     /// - Note: Subscribing to new event types does not remove previous subscriptions
     public func subscribe(_ events: [es_event_type_t]) throws {
-        try tryAction("esSubscribe", success: ES_RETURN_SUCCESS) {
+        try tryAction("subscribe", success: ES_RETURN_SUCCESS) {
             client.esSubscribe(events)
         }
     }
@@ -146,7 +146,7 @@ public final class ESClient: ESClientProtocol {
     /// - Note: Events not included in the given `events` array that were previously subscribed to
     ///         will continue to be subscribed to
     public func unsubscribe(_ events: [es_event_type_t]) throws {
-        try tryAction("esUnsubscribe", success: ES_RETURN_SUCCESS) {
+        try tryAction("unsubscribe", success: ES_RETURN_SUCCESS) {
             client.esUnsubscribe(events)
         }
     }
@@ -155,7 +155,7 @@ public final class ESClient: ESClientProtocol {
     /// - Parameters:
     ///     - returns: Boolean indicating success or error
     public func unsubscribeAll() throws {
-        try tryAction("esUnsubscribe", success: ES_RETURN_SUCCESS) {
+        try tryAction("unsubscribeAll", success: ES_RETURN_SUCCESS) {
             client.esUnsubscribeAll()
         }
     }
@@ -164,7 +164,7 @@ public final class ESClient: ESClientProtocol {
     /// - Parameters:
     ///     - returns: es_clear_cache_result_t value indicating success or an error
     public func clearCache() throws {
-        try tryAction("esUnsubscribe", success: ES_CLEAR_CACHE_RESULT_SUCCESS) {
+        try tryAction("clearCache", success: ES_CLEAR_CACHE_RESULT_SUCCESS) {
             client.esClearCache()
         }
     }
