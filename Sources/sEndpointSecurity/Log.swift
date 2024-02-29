@@ -34,7 +34,7 @@ public enum sEndpointSecurityLog {
 }
 
 extension SpellbookLog {
-    internal static func internalLog(_ category: sEndpointSecurityLog.Category) -> SpellbookLog {
+    package static func internalLog(_ category: sEndpointSecurityLog.Category) -> SpellbookLog {
         SpellbookLogger.default.with(subsystem: sEndpointSecurityLog.subsystem, category: category.rawValue)
     }
 }

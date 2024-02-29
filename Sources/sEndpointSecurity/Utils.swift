@@ -24,7 +24,7 @@ import Foundation
 
 extension Optional where Wrapped == DispatchQueue {
     @inline(__always)
-    internal func async(flags: DispatchWorkItemFlags = [], execute work: @escaping () -> Void) {
+    package func async(flags: DispatchWorkItemFlags = [], execute work: @escaping () -> Void) {
         if let self {
             self.async(flags: flags, execute: work)
         } else {
@@ -33,7 +33,7 @@ extension Optional where Wrapped == DispatchQueue {
     }
     
     @inline(__always)
-    internal func sync<R>(execute work: () -> R) -> R {
+    package func sync<R>(execute work: () -> R) -> R {
         if let self {
             return self.sync(execute: work)
         } else {

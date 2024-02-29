@@ -20,6 +20,8 @@
 //  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 //  SOFTWARE.
 
+import sEndpointSecurity
+
 import Combine
 import EndpointSecurity
 import Foundation
@@ -248,7 +250,9 @@ private final class ESXPCExportedObject: NSObject, ESClientXPCProtocol {
         do {
             let encoded = try xpcEncoder.encode(process)
             let executor = SynchronousExecutor("HandlePathInterest", timeout: 5.0)
-            guard let interest = try executor({ self.delegate.handlePathInterest(encoded, reply: $0) }) else {
+            guard let interest = try executor({ reply in
+                DispatchQueue.global().async { self.delegate.handlePathInterest(encoded, reply: reply) }
+            }) else {
                 return .listen()
             }
             let decoded = try xpcDecoder.decode(ESInterest.self, from: interest)
