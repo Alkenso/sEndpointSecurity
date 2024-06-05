@@ -1782,6 +1782,15 @@ extension ESEvent.Create.Destination {
             return dir.path.appendingPathComponent(filename)
         }
     }
+    
+    public var mode: mode_t {
+        switch self {
+        case .existingFile(let file):
+            return file.stat.st_mode
+        case .newPath(let dir, let filename, let mode):
+            return mode
+        }
+    }
 }
 
 extension ESEvent.Rename.Destination {
